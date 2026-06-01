@@ -14,81 +14,84 @@
     *, *::before, *::after {
       margin: 0; padding: 0; box-sizing: border-box;
       -webkit-tap-highlight-color: transparent;
-      /* [FIX 5] 300ms 탭 지연 제거 (Android Chrome) */
       touch-action: manipulation;
     }
     :root {
-      --red:        #A50034;
-      --red-dark:   #7D0027;
-      --red-alpha:  rgba(165,0,52,0.08);
-      --dark:       #1A1A1A;
-      --mid:        #555;
-      --light:      #999;
-      --bg:         #F2F2F2;
-      --white:      #FFFFFF;
-      --border:     #E5E5E5;
-      --sh-sm:      0 1px 4px rgba(0,0,0,0.07);
-      --sh-md:      0 2px 10px rgba(0,0,0,0.10);
-      --r:          12px;
-      --hdr:        56px;
-      --tab:        64px;
-      --sab:        env(safe-area-inset-bottom, 0px);
-      /* [FIX 1] iOS 노치/Dynamic Island 상단 안전 영역 */
-      --sat:        env(safe-area-inset-top, 0px);
+      --red:       #A50034;
+      --red-dark:  #7D0027;
+      --red-bg:    rgba(165,0,52,0.09);
+      --slate-bg:  rgba(55,65,81,0.08);
+      --slate:     #374151;
+      --dark:      #1A1A1A;
+      --mid:       #555;
+      --light:     #999;
+      --bg:        #F0F0F0;
+      --white:     #FFFFFF;
+      --border:    #E5E5E5;
+      --sh-sm:     0 1px 4px rgba(0,0,0,0.07);
+      --r:         12px;
+      --hdr:       56px;
+      --tab:       64px;
+      --sab:       env(safe-area-inset-bottom, 0px);
+      --sat:       env(safe-area-inset-top, 0px);
     }
     html, body { height: 100%; overflow: hidden; }
     body {
       font-family: -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
-      background: var(--bg);
-      color: var(--dark);
+      background: var(--bg); color: var(--dark);
     }
 
-    /* ── HEADER ─────────────────────────────── */
+    /* ── HEADER ─────────────────────────── */
     .hdr {
       position: fixed; top: 0; left: 0; right: 0;
-      /* [FIX 1] 높이 = 기본 56px + 상단 안전 영역(노치/Dynamic Island) */
       height: calc(var(--hdr) + var(--sat));
       padding-top: var(--sat);
+      padding-left: 18px; padding-right: 14px;
       background: var(--red);
       display: flex; align-items: center; justify-content: space-between;
-      padding-left: 18px; padding-right: 14px;
       z-index: 200;
       box-shadow: 0 2px 8px rgba(0,0,0,0.18);
     }
     .hdr-brand { display: flex; flex-direction: column; gap: 1px; }
     .hdr-name  { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
-    .hdr-sub   { font-size: 10px; color: rgba(255,255,255,0.62); font-weight: 400; }
+    .hdr-sub   { font-size: 10px; color: rgba(255,255,255,0.6); }
     .hdr-btn {
-      width: 44px; height: 44px; display: flex;
-      align-items: center; justify-content: center;
+      width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
       border-radius: 10px; border: none;
-      background: rgba(255,255,255,0.15);
-      color: #fff; cursor: pointer;
+      background: rgba(255,255,255,0.15); color: #fff; cursor: pointer;
     }
     .hdr-btn:active { background: rgba(255,255,255,0.28); }
 
-    /* ── BANNER ──────────────────────────────── */
+    /* ── BANNER ──────────────────────────── */
     .bnr {
       position: fixed;
-      /* [FIX 1] 헤더 아래(노치 포함 높이) 바로 붙임 */
       top: calc(var(--hdr) + var(--sat));
-      left: 0; right: 0;
-      z-index: 190;
+      left: 0; right: 0; z-index: 190;
       transition: opacity .28s ease, visibility .28s ease;
-      overflow: hidden;
     }
     .bnr-inner {
       display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px 10px 16px;
-      min-height: var(--bnr);
+      padding: 11px 12px 11px 14px;
+      min-height: 58px;
       border-bottom: 2px solid transparent;
     }
     .bnr.urgent .bnr-inner { background: #FFF0F0; border-color: #FF3B30; }
-    .bnr.warn   .bnr-inner { background: #FFFBEB; border-color: #FFCC00; }
+    .bnr.warn   .bnr-inner { background: #FFFBEB; border-color: #F59E0B; }
     .bnr.info   .bnr-inner { background: #EFF6FF; border-color: #60A5FA; }
-    .bnr-ico  { font-size: 20px; flex-shrink: 0; }
-    .bnr-msg  { flex: 1; font-size: 13px; font-weight: 500; color: var(--dark); line-height: 1.45; }
-    .bnr-cta  {
+    .bnr-ico {
+      width: 34px; height: 34px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 8px;
+    }
+    .bnr.urgent .bnr-ico { background: rgba(255,59,48,0.10); color: #D00; }
+    .bnr.warn   .bnr-ico { background: rgba(245,158,11,0.10); color: #B45309; }
+    .bnr.info   .bnr-ico { background: rgba(59,130,246,0.10); color: #1D4ED8; }
+    .bnr-msg {
+      flex: 1; font-size: 13px; font-weight: 500;
+      color: var(--dark); line-height: 1.45;
+    }
+    .bnr-cta {
       min-width: 52px; min-height: 44px;
       display: flex; align-items: center; justify-content: center;
       font-size: 12px; font-weight: 700; color: var(--red);
@@ -97,17 +100,15 @@
     .bnr-x {
       min-width: 36px; min-height: 44px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 17px; color: var(--light);
-      background: none; border: none; cursor: pointer; flex-shrink: 0;
+      color: var(--light); background: none; border: none;
+      cursor: pointer; flex-shrink: 0;
     }
-    /* [FIX 4] height 대신 visibility+opacity로 숨김 처리 → 높이 계산 JS로 위임 */
     .bnr.gone { opacity: 0; visibility: hidden; pointer-events: none; }
 
-    /* ── SCROLL AREA ─────────────────────────── */
+    /* ── SCROLL AREA ─────────────────────── */
     .wrap {
       position: fixed;
-      /* [FIX 4] top은 JS adjustWrap()이 동적으로 계산해서 덮어씀 */
-      top: calc(var(--hdr) + var(--sat) + 60px);
+      top: calc(var(--hdr) + var(--sat) + 58px);
       left: 0; right: 0;
       bottom: calc(var(--tab) + var(--sab));
       overflow-y: auto; overflow-x: hidden;
@@ -115,27 +116,23 @@
       transition: top .18s ease;
     }
 
-    /* ── TAB PANELS ──────────────────────────── */
-    .panel      { display: none; padding: 16px 14px 24px; }
-    .panel.on   { display: block; }
+    /* ── TAB PANELS ──────────────────────── */
+    .panel    { display: none; padding: 16px 14px 24px; }
+    .panel.on { display: block; }
 
-    /* ── SECTION HEADER ──────────────────────── */
+    /* ── SECTION HEADER ──────────────────── */
     .sec {
       display: flex; align-items: center;
-      justify-content: space-between;
       margin-bottom: 12px; margin-top: 2px;
     }
     .sec-ttl {
-      font-size: 14px; font-weight: 700; color: var(--dark);
-      display: flex; align-items: center; gap: 8px;
-    }
-    .sec-ttl::before {
-      content: ''; width: 3px; height: 15px;
-      border-radius: 2px; background: var(--red); display: inline-block;
+      font-size: 13px; font-weight: 700;
+      color: var(--mid); text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     .divider { height: 1px; background: var(--border); margin: 20px 0 16px; }
 
-    /* ── SERVICE CARDS GRID ──────────────────── */
+    /* ── SERVICE CARDS GRID ──────────────── */
     .grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -146,37 +143,45 @@
       border-radius: var(--r);
       border: 1px solid var(--border);
       box-shadow: var(--sh-sm);
-      padding: 20px 12px 16px;
+      padding: 18px 12px 16px;
       display: flex; flex-direction: column;
-      align-items: center; text-align: center; gap: 7px;
-      min-height: 110px;
+      align-items: center; text-align: center; gap: 10px;
+      min-height: 124px;
       text-decoration: none; color: inherit;
-      position: relative; overflow: hidden; cursor: pointer;
+      cursor: pointer;
       transition: transform .12s, box-shadow .12s;
     }
-    .card::before {
-      content: ''; position: absolute;
-      top: 0; left: 0; right: 0; height: 3px;
-      background: var(--red);
-    }
-    .card.alt::before { background: #666; }
-    .card:active { transform: scale(0.96); box-shadow: 0 0 0 2px var(--red-alpha); }
-    .card-ico  { font-size: 34px; line-height: 1; }
-    .card-name { font-size: 14px; font-weight: 700; color: var(--dark); line-height: 1.3; }
-    .card-desc { font-size: 11px; color: var(--light); line-height: 1.3; }
+    .card:active { transform: scale(0.96); box-shadow: none; }
 
-    /* ── CONTACTS ────────────────────────────── */
+    /* icon badge */
+    .card-ico {
+      width: 52px; height: 52px;
+      border-radius: 14px;
+      background: var(--red-bg);
+      color: var(--red);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .card.alt .card-ico {
+      background: var(--slate-bg);
+      color: var(--slate);
+    }
+    .card-name { font-size: 14px; font-weight: 700; color: var(--dark); line-height: 1.25; }
+    .card-desc { font-size: 11px; color: var(--light); line-height: 1.3; margin-top: -4px; }
+
+    /* ── CONTACTS ────────────────────────── */
     .srch-wrap { position: relative; margin-bottom: 14px; }
     .srch-ico  {
       position: absolute; left: 13px; top: 50%;
-      transform: translateY(-50%); font-size: 16px; pointer-events: none;
+      transform: translateY(-50%);
+      color: var(--light); pointer-events: none;
+      display: flex; align-items: center;
     }
     .srch-inp {
       width: 100%; height: 48px;
       border-radius: 10px; border: 1.5px solid var(--border);
       background: var(--white);
       padding: 0 14px 0 42px;
-      /* [FIX 2] 16px 미만이면 iOS Safari가 탭 시 화면 자동 확대됨 */
       font-size: 16px; font-family: inherit; color: var(--dark);
       outline: none; -webkit-appearance: none;
     }
@@ -197,17 +202,17 @@
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
     }
-    .cinfo      { flex: 1; }
-    .cname      { font-size: 15px; font-weight: 600; }
-    .cdept      { font-size: 12px; color: var(--light); margin-top: 2px; }
+    .cinfo { flex: 1; }
+    .cname { font-size: 15px; font-weight: 600; }
+    .cdept { font-size: 12px; color: var(--light); margin-top: 2px; }
     .ccall {
       width: 46px; height: 46px; border-radius: 50%;
-      background: #F0FFF4;
+      background: #F0FFF4; color: #16A34A;
       display: flex; align-items: center; justify-content: center;
-      font-size: 20px; flex-shrink: 0; text-decoration: none;
+      flex-shrink: 0;
     }
 
-    /* ── NOTICE FEED ─────────────────────────── */
+    /* ── NOTICE FEED ─────────────────────── */
     .nrow {
       background: var(--white);
       border-radius: 12px; border: 1px solid var(--border);
@@ -223,8 +228,8 @@
       display: flex; align-items: center;
       justify-content: space-between; margin-top: 10px;
     }
-    .ndate     { font-size: 11px; color: var(--light); }
-    .badge     {
+    .ndate { font-size: 11px; color: var(--light); }
+    .badge {
       font-size: 11px; font-weight: 700;
       padding: 3px 10px; border-radius: 20px;
       background: #FFE8EE; color: var(--red);
@@ -232,7 +237,7 @@
     .badge.warn { background: #FEF3C7; color: #92400E; }
     .badge.info { background: #DBEAFE; color: #1D4ED8; }
 
-    /* ── BOTTOM TAB BAR ──────────────────────── */
+    /* ── BOTTOM TAB BAR ──────────────────── */
     .tabbar {
       position: fixed; bottom: 0; left: 0; right: 0;
       height: calc(var(--tab) + var(--sab));
@@ -242,6 +247,7 @@
       display: flex; align-items: stretch;
       z-index: 200;
       box-shadow: 0 -2px 14px rgba(0,0,0,0.07);
+      transition: opacity .2s;
     }
     .tab {
       flex: 1; display: flex; flex-direction: column;
@@ -257,7 +263,7 @@
       top: 0; left: 22%; right: 22%; height: 2px;
       background: var(--red); border-radius: 0 0 2px 2px;
     }
-    .tab-ico { font-size: 23px; line-height: 1; }
+    .tab-ico { display: flex; align-items: center; justify-content: center; }
     .tab-lbl { font-size: 10px; font-weight: 600; }
     .tbadge {
       position: absolute; top: 5px; right: calc(50% - 20px);
@@ -268,10 +274,9 @@
       padding: 0 4px;
     }
 
-    /* ── BOTTOM SHEET ────────────────────────── */
+    /* ── BOTTOM SHEET ────────────────────── */
     .overlay {
       display: none; position: fixed;
-      /* [FIX 3] inset: 0 → iOS 14.1 미만 미지원, 명시적으로 분리 */
       top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.45); z-index: 300;
       align-items: flex-end;
@@ -287,13 +292,25 @@
       width: 36px; height: 4px; border-radius: 2px;
       background: var(--border); margin: 14px auto 20px;
     }
-    .sh-title  { font-size: 18px; font-weight: 700; margin-bottom: 18px; }
+    .sh-hdr {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 18px;
+    }
+    .sh-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--red-bg); color: var(--red);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .sh-title  { font-size: 18px; font-weight: 700; }
     .info-box  {
+      display: flex; align-items: flex-start; gap: 10px;
       background: #EFF6FF; border: 1px solid #BAE6FD;
       border-radius: 10px; padding: 12px 14px;
       font-size: 12px; color: #0369A1; line-height: 1.5;
       margin-bottom: 18px;
     }
+    .info-box svg { flex-shrink: 0; margin-top: 1px; }
     .fl { margin-bottom: 14px; }
     .fl label {
       display: block; font-size: 12px; font-weight: 600;
@@ -303,7 +320,6 @@
       width: 100%; height: 48px;
       border-radius: 10px; border: 1.5px solid var(--border);
       background: #F9F9F9; padding: 0 14px;
-      /* [FIX 2] iOS 자동 확대 방지 */
       font-size: 16px; font-family: inherit; color: var(--dark);
       outline: none; -webkit-appearance: none;
     }
@@ -334,7 +350,7 @@
   </div>
   <button class="hdr-btn" id="settingsBtn" aria-label="설정">
     <svg width="21" height="21" viewBox="0 0 24 24" fill="none"
-         stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="3"/>
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06
                a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09
@@ -352,10 +368,16 @@
 <!-- NOTICE BANNER -->
 <div class="bnr urgent" id="bnr">
   <div class="bnr-inner">
-    <span class="bnr-ico" id="bnrIco">🚨</span>
+    <span class="bnr-ico" id="bnrIco"></span>
     <div class="bnr-msg" id="bnrMsg">[긴급] 오늘 오전 10시 안전교육 필수 참석 — 2층 대회의실</div>
     <a class="bnr-cta" id="bnrCta" href="#" target="_blank" rel="noopener">확인 →</a>
-    <button class="bnr-x" id="bnrX" aria-label="닫기">✕</button>
+    <button class="bnr-x" id="bnrX" aria-label="닫기">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
   </div>
 </div>
 
@@ -374,7 +396,12 @@
   <!-- CONTACTS -->
   <div class="panel" id="panel-contacts">
     <div class="srch-wrap">
-      <span class="srch-ico">🔍</span>
+      <span class="srch-ico">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </span>
       <input type="search" class="srch-inp" id="srch" placeholder="이름 또는 부서 검색" autocomplete="off">
     </div>
     <div id="clist"></div>
@@ -389,16 +416,36 @@
 
 <!-- TAB BAR -->
 <nav class="tabbar">
-  <button class="tab on" id="tab-home"     onclick="goTab('home')">
-    <span class="tab-ico">🏠</span>
+  <button class="tab on" id="tab-home" onclick="goTab('home')">
+    <span class="tab-ico">
+      <svg width="23" height="23" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+    </span>
     <span class="tab-lbl">홈</span>
   </button>
-  <button class="tab"    id="tab-contacts" onclick="goTab('contacts')">
-    <span class="tab-ico">👥</span>
+  <button class="tab" id="tab-contacts" onclick="goTab('contacts')">
+    <span class="tab-ico">
+      <svg width="23" height="23" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    </span>
     <span class="tab-lbl">연락망</span>
   </button>
-  <button class="tab"    id="tab-notices"  onclick="goTab('notices')">
-    <span class="tab-ico">🔔</span>
+  <button class="tab" id="tab-notices" onclick="goTab('notices')">
+    <span class="tab-ico">
+      <svg width="23" height="23" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+    </span>
     <span class="tab-lbl">공지</span>
     <span class="tbadge" id="tbadge"></span>
   </button>
@@ -408,10 +455,33 @@
 <div class="overlay" id="overlay" onclick="if(event.target===this)closeSheet()">
   <div class="sheet">
     <div class="sh-handle"></div>
-    <div class="sh-title">⚙️ 관리자 설정</div>
+    <div class="sh-hdr">
+      <div class="sh-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06
+                   a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09
+                   A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83
+                   l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09
+                   A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83
+                   l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09
+                   a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83
+                   l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09
+                   a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </div>
+      <span class="sh-title">관리자 설정</span>
+    </div>
     <div class="info-box">
-      💡 서비스 링크·연락처는 파일 상단 <strong>CONFIG</strong> 영역에서 직접 수정하세요.
-      여기서는 <strong>긴급 공지 배너</strong>만 실시간 편집 가능합니다.
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="16" x2="12" y2="12"/>
+        <line x1="12" y1="8" x2="12.01" y2="8"/>
+      </svg>
+      <span>서비스 링크·연락처는 파일 상단 <strong>CONFIG</strong> 영역에서 수정하세요.
+      여기서는 <strong>긴급 공지 배너</strong>만 실시간 편집 가능합니다.</span>
     </div>
     <div class="sec" style="margin-top:0"><span class="sec-ttl">공지 배너 편집</span></div>
     <div class="fl">
@@ -425,9 +495,9 @@
     <div class="fl">
       <label>배너 색상</label>
       <select class="fi" id="eType" style="-webkit-appearance:none;appearance:none;background:#F9F9F9">
-        <option value="urgent">🚨 긴급 (빨간색)</option>
-        <option value="warn">⚠️ 주의 (노란색)</option>
-        <option value="info">ℹ️ 안내 (파란색)</option>
+        <option value="urgent">긴급 — 빨간색</option>
+        <option value="warn">주의 — 노란색</option>
+        <option value="info">안내 — 파란색</option>
       </select>
     </div>
     <button class="btn-main"  onclick="saveNotice()">저장 및 적용</button>
@@ -437,41 +507,47 @@
 
 <script>
 /* ================================================================
-   ✏️  CONFIG — 여기서 앱 내용을 자유롭게 수정하세요
+   ✏️  CONFIG — 여기서 앱 내용을 수정하세요
+   ================================================================
+
+   ico 값으로 사용 가능한 아이콘 이름:
+   smartphone, globe, file-text, calendar, cloud, message-square,
+   bar-chart-2, server, alert-triangle, phone-call, camera,
+   clipboard-check, folder, users, briefcase, map-pin, mail
+
    ================================================================ */
 const CONFIG = {
 
   appName: '사내 통합 포털',
 
-  /* 긴급 공지 배너
-     type: 'urgent'(빨강) | 'warn'(노랑) | 'info'(파랑)         */
+  /* 긴급 공지 배너 — type: 'urgent'(빨강) | 'warn'(노랑) | 'info'(파랑) */
   notice: {
     text: '[긴급] 오늘 오전 10시 안전교육 필수 참석 — 2층 대회의실',
     url:  '',
     type: 'urgent',
   },
 
-  /* 업무 도구 카드 — ico: 이모지, url: 이동할 주소               */
+  /* 업무 도구 카드 */
   services: [
-    { ico:'📋', name:'AppSheet',    desc:'현장 작업 앱',      url:'https://www.appsheet.com/' },
-    { ico:'🌐', name:'팀 사이트',   desc:'구글 사이트 도구',  url:'https://sites.google.com/' },
-    { ico:'📝', name:'업무 일지',   desc:'일일 보고서 작성',  url:'https://forms.google.com/' },
-    { ico:'📅', name:'캘린더',      desc:'일정 및 예약 관리', url:'https://calendar.google.com/' },
-    { ico:'📁', name:'드라이브',    desc:'공유 문서함',        url:'https://drive.google.com/' },
-    { ico:'💬', name:'팀 채팅',     desc:'팀 메신저',          url:'https://chat.google.com/' },
-    { ico:'📊', name:'현황 판',     desc:'실시간 대시보드',    url:'#' },
-    { ico:'🔧', name:'업무 시스템', desc:'사내 ERP / HR',      url:'#' },
+    { ico:'smartphone',    name:'AppSheet',    desc:'현장 작업 앱',      url:'https://www.appsheet.com/' },
+    { ico:'globe',         name:'팀 사이트',   desc:'구글 사이트 도구',  url:'https://sites.google.com/' },
+    { ico:'file-text',     name:'업무 일지',   desc:'일일 보고서 작성',  url:'https://forms.google.com/' },
+    { ico:'calendar',      name:'캘린더',      desc:'일정 및 예약 관리', url:'https://calendar.google.com/' },
+    { ico:'cloud',         name:'드라이브',    desc:'공유 문서함',        url:'https://drive.google.com/' },
+    { ico:'message-square',name:'팀 채팅',     desc:'팀 메신저',          url:'https://chat.google.com/' },
+    { ico:'bar-chart-2',   name:'현황 판',     desc:'실시간 대시보드',    url:'#' },
+    { ico:'server',        name:'업무 시스템', desc:'사내 ERP / HR',      url:'#' },
   ],
 
-  /* 빠른 실행 링크                                                */
+  /* 빠른 실행 링크 */
   quickLinks: [
-    { ico:'🆘', name:'비상 매뉴얼', desc:'긴급 상황 프로세스', url:'#' },
-    { ico:'📞', name:'비상 연락처', desc:'핵심 연락처 모음',   url:'#' },
-    { ico:'📷', name:'사진 제출',   desc:'현장 사진 업로드',   url:'#' },
-    { ico:'✅', name:'점검 체크',   desc:'일일 점검표 작성',   url:'#' },
+    { ico:'alert-triangle', name:'비상 매뉴얼', desc:'긴급 상황 프로세스', url:'#' },
+    { ico:'phone-call',     name:'비상 연락처', desc:'핵심 연락처 모음',   url:'#' },
+    { ico:'camera',         name:'사진 제출',   desc:'현장 사진 업로드',   url:'#' },
+    { ico:'clipboard-check',name:'점검 체크',   desc:'일일 점검표 작성',   url:'#' },
   ],
 
-  /* 연락망 — initials: 아바타에 표시할 한 글자                   */
+  /* 연락망 */
   contacts: [
     { name:'김현장', dept:'현장관리팀 · 팀장',  tel:'tel:010-0000-0001', initials:'김' },
     { name:'이안전', dept:'안전보건팀 · 담당',  tel:'tel:010-0000-0002', initials:'이' },
@@ -481,7 +557,7 @@ const CONFIG = {
     { name:'강IT',   dept:'IT지원팀 · 담당',    tel:'tel:010-0000-0006', initials:'강' },
   ],
 
-  /* 공지사항 — type: 'urgent'|'warn'|'info'|''                   */
+  /* 공지사항 — type: 'urgent'|'warn'|'info'|'' */
   notices: [
     {
       title:'[필독] 5월 안전교육 일정 안내',
@@ -509,47 +585,73 @@ const CONFIG = {
    여기까지가 편집 영역입니다
    ================================================================ */
 
-const ICO = { urgent:'🚨', warn:'⚠️', info:'ℹ️' };
+/* ── Lucide-style inline SVG 아이콘 ─────────────────────────── */
+const ICONS = {
+  'smartphone':      '<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
+  'globe':           '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  'file-text':       '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+  'calendar':        '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  'cloud':           '<path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>',
+  'message-square':  '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  'bar-chart-2':     '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  'server':          '<rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
+  'alert-triangle':  '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  'phone-call':      '<path d="M15.05 5A5 5 0 0 1 19 8.95M15.05 1A9 9 0 0 1 23 8.94m-1 7.98v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.5 12.15a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.41 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9.5a16 16 0 0 0 6 6l.75-.75a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21 17z"/>',
+  'camera':          '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+  'clipboard-check': '<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1" ry="1"/><path d="m9 14 2 2 4-4"/>',
+  'folder':          '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  'users':           '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  'briefcase':       '<rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+  'map-pin':         '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+  'mail':            '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
+  'phone':           '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.5 12.15a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.41 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9.5a16 16 0 0 0 6 6l.75-.75a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  'alert-circle':    '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+  'info':            '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+};
+
+/* SVG 생성 헬퍼 */
+function icon(name, size = 24, sw = 1.75) {
+  const p = ICONS[name] || ICONS['briefcase'];
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none"
+    stroke="currentColor" stroke-width="${sw}" stroke-linecap="round"
+    stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+}
+
+/* ── 배너 아이콘 매핑 ──────────────────────────────────────── */
+const BICO = { urgent:'alert-triangle', warn:'alert-circle', info:'info' };
+
+/* ── state ─────────────────────────────────────────────────── */
 let live = JSON.parse(localStorage.getItem('liveNotice')) || null;
 const D  = { ...CONFIG, notice: live || CONFIG.notice };
 
-/* ── [FIX 4] 배너 실제 높이로 스크롤 영역 top 동적 계산 ── */
+/* ── 배너 높이 기반 스크롤 영역 동적 계산 ──────────────────── */
 function adjustWrap() {
   const bnr  = document.getElementById('bnr');
   const wrap = document.getElementById('wrap');
-  const hdr  = document.querySelector('.hdr');
-  const hdrH = hdr.getBoundingClientRect().height;
-  if (bnr.classList.contains('gone')) {
-    wrap.style.top = hdrH + 'px';
-  } else {
-    wrap.style.top = (hdrH + bnr.getBoundingClientRect().height) + 'px';
-  }
+  const hdrH = document.querySelector('.hdr').getBoundingClientRect().height;
+  wrap.style.top = bnr.classList.contains('gone')
+    ? hdrH + 'px'
+    : (hdrH + bnr.getBoundingClientRect().height) + 'px';
 }
 
-/* ── [FIX 6] Android Chrome PWA 매니페스트 주입 ────────── */
+/* ── Android Chrome PWA 매니페스트 주입 ─────────────────────── */
 function injectManifest() {
-  const m = {
-    name: CONFIG.appName,
-    short_name: '사내 포털',
-    start_url: './',
-    display: 'standalone',
-    background_color: '#A50034',
-    theme_color: '#A50034',
-    orientation: 'portrait-primary',
-    lang: 'ko',
-  };
-  const blob = new Blob([JSON.stringify(m)], { type: 'application/manifest+json' });
-  const link = document.createElement('link');
-  link.rel = 'manifest';
-  link.href = URL.createObjectURL(blob);
-  document.head.appendChild(link);
+  const blob = new Blob([JSON.stringify({
+    name: CONFIG.appName, short_name: '사내 포털',
+    start_url: './', display: 'standalone',
+    background_color: '#A50034', theme_color: '#A50034',
+    orientation: 'portrait-primary', lang: 'ko',
+  })], { type: 'application/manifest+json' });
+  const lnk = document.createElement('link');
+  lnk.rel = 'manifest';
+  lnk.href = URL.createObjectURL(blob);
+  document.head.appendChild(lnk);
 }
 
-/* ── init ─────────────────────────────────────────── */
+/* ── init ───────────────────────────────────────────────────── */
 function init() {
   document.getElementById('appName').textContent = CONFIG.appName;
   document.title = CONFIG.appName;
-
   injectManifest();
   applyBanner();
   renderGrid('grid-svc',   D.services,   false);
@@ -562,12 +664,11 @@ function init() {
   document.getElementById('bnrX').addEventListener('click', hideBanner);
   document.getElementById('srch').addEventListener('input', e => renderContacts(e.target.value));
 
-  /* 배너 높이 초기 계산 + 폰트/이미지 로드 후 재계산 */
   adjustWrap();
   window.addEventListener('resize', adjustWrap);
   window.addEventListener('load',   adjustWrap);
 
-  /* [iOS 키보드] 입력 포커스 시 탭바 숨김 → 키보드에 탭바가 가려지는 현상 방지 */
+  /* iOS 키보드 표시 시 탭바 숨김 */
   const tabbar = document.querySelector('.tabbar');
   document.querySelectorAll('input, textarea, select').forEach(el => {
     el.addEventListener('focus', () => { tabbar.style.opacity = '0'; tabbar.style.pointerEvents = 'none'; });
@@ -575,40 +676,38 @@ function init() {
   });
 }
 
-/* ── banner ───────────────────────────────────────── */
+/* ── 배너 ───────────────────────────────────────────────────── */
 function applyBanner() {
-  const n = D.notice;
+  const n  = D.notice;
   const el = document.getElementById('bnr');
   document.getElementById('bnrMsg').textContent = n.text;
-  document.getElementById('bnrIco').textContent = ICO[n.type] || '📢';
+  /* SVG 아이콘 적용 */
+  document.getElementById('bnrIco').innerHTML = icon(BICO[n.type] || 'info', 18, 2.2);
   const cta = document.getElementById('bnrCta');
   cta.style.display = n.url ? '' : 'none';
   if (n.url) cta.href = n.url;
   el.className = 'bnr ' + (n.type || 'info');
-  if (sessionStorage.getItem('bnrGone') === '1') {
-    el.classList.add('gone');
-  }
+  if (sessionStorage.getItem('bnrGone') === '1') el.classList.add('gone');
 }
 
 function hideBanner() {
   document.getElementById('bnr').classList.add('gone');
   sessionStorage.setItem('bnrGone', '1');
-  /* [FIX 4] 배너 숨김 후 transition 완료 시점에 재계산 */
   setTimeout(adjustWrap, 300);
 }
 
-/* ── grids ────────────────────────────────────────── */
+/* ── 카드 그리드 렌더링 ─────────────────────────────────────── */
 function renderGrid(id, items, alt) {
   document.getElementById(id).innerHTML = items.map(s =>
-    `<a class="card${alt?' alt':''}" href="${s.url}" target="_blank" rel="noopener noreferrer">
-      <span class="card-ico">${s.ico}</span>
+    `<a class="card${alt ? ' alt' : ''}" href="${s.url}" target="_blank" rel="noopener noreferrer">
+      <div class="card-ico">${icon(s.ico, 26, 1.75)}</div>
       <span class="card-name">${s.name}</span>
       <span class="card-desc">${s.desc}</span>
     </a>`
   ).join('');
 }
 
-/* ── contacts ─────────────────────────────────────── */
+/* ── 연락망 렌더링 ──────────────────────────────────────────── */
 function renderContacts(q = '') {
   const f = q.trim();
   const rows = f
@@ -622,21 +721,21 @@ function renderContacts(q = '') {
             <div class="cname">${c.name}</div>
             <div class="cdept">${c.dept}</div>
           </div>
-          <div class="ccall">📞</div>
+          <div class="ccall">${icon('phone', 20, 2)}</div>
         </a>`
       ).join('')
     : '<p style="text-align:center;color:#aaa;padding:40px 0;font-size:14px">검색 결과 없음</p>';
 }
 
-/* ── notices ──────────────────────────────────────── */
+/* ── 공지 피드 렌더링 ───────────────────────────────────────── */
 function renderNotices() {
   document.getElementById('nlist').innerHTML = D.notices.map(n =>
-    `<div class="nrow ${n.type||''}" ${n.url?`onclick="window.open('${n.url}','_blank','noopener')"`:''}>
+    `<div class="nrow ${n.type || ''}" ${n.url ? `onclick="window.open('${n.url}','_blank','noopener')"` : ''}>
       <div class="nrow-ttl">${n.title}</div>
       <div class="nrow-body">${n.body}</div>
       <div class="nrow-foot">
         <span class="ndate">${n.date}</span>
-        ${n.badge?`<span class="badge ${n.type||''}">${n.badge}</span>`:''}
+        ${n.badge ? `<span class="badge ${n.type || ''}">${n.badge}</span>` : ''}
       </div>
     </div>`
   ).join('');
@@ -649,16 +748,16 @@ function updateBadge() {
   el.style.display = count ? '' : 'none';
 }
 
-/* ── tab switching ────────────────────────────────── */
+/* ── 탭 전환 ─────────────────────────────────────────────────── */
 function goTab(name) {
-  ['home','contacts','notices'].forEach(t => {
-    document.getElementById('panel-'+t).classList.toggle('on', t===name);
-    document.getElementById('tab-'+t).classList.toggle('on', t===name);
+  ['home', 'contacts', 'notices'].forEach(t => {
+    document.getElementById('panel-' + t).classList.toggle('on', t === name);
+    document.getElementById('tab-' + t).classList.toggle('on', t === name);
   });
   document.getElementById('wrap').scrollTop = 0;
 }
 
-/* ── settings sheet ───────────────────────────────── */
+/* ── 설정 시트 ──────────────────────────────────────────────── */
 function openSheet() {
   document.getElementById('eMsg').value  = D.notice.text;
   document.getElementById('eUrl').value  = D.notice.url;
@@ -672,7 +771,7 @@ function closeSheet() {
 
 function saveNotice() {
   const updated = {
-    text: document.getElementById('eMsg').value.trim()  || D.notice.text,
+    text: document.getElementById('eMsg').value.trim() || D.notice.text,
     url:  document.getElementById('eUrl').value.trim(),
     type: document.getElementById('eType').value,
   };
@@ -681,7 +780,6 @@ function saveNotice() {
   sessionStorage.removeItem('bnrGone');
   document.getElementById('bnr').classList.remove('gone');
   applyBanner();
-  /* [FIX 4] 배너 복원 후 레이아웃 재계산 */
   setTimeout(adjustWrap, 50);
   closeSheet();
 }
