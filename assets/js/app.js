@@ -103,17 +103,22 @@
       console.info("%c[KMA] 날씨 프록시(WEATHER_PROXY_URL) 미설정 → 샘플 데이터 + '샘플' 배지 표시 중.", "color:#6b7280");
     } else {
       try {
-        const now = await fetchKmaNow();          // 초단기실황(기온/습도/풍속/풍향/강수량)
-        const vil = await fetchKmaVilageRaw();     // 단기예보(시간별/주간/POP 공용)
+        // ⚡ 4개 호출을 병렬로 동시 실행 (순차 ~7.5s → 가장 느린 1개 ~2s)
+        //  - now/vil 은 필수(실패 시 전체 오류) → Promise.all 에 그대로
+        //  - ext/alert 는 보조 → safeCall 로 감싸 실패해도 전체를 막지 않음
+        const [now, vil, ext, alert] = await Promise.all([
+          fetchKmaNow(),                              // 초단기실황(기온/습도/풍속/풍향/강수량)
+          fetchKmaVilageRaw(),                        // 단기예보(시간별/주간/POP 공용)
+          safeCall(fetchKmaExtremes, null),           // 오늘 정확한 최고/최저(02시 발표분)
+          safeCall(fetchKmaAlert, { active: false }), // 기상특보 (실패 시 미발령)
+        ]);
         Object.assign(now, parseTodayExtremes(vil));  // 강수확률 + 최고/최저 폴백
         Object.assign(now, parseCurrentSky(vil));     // 하늘상태(SKY) 보정 → 맑음/구름많음/흐림
-        const ext = await safeCall(fetchKmaExtremes, null);  // 오늘 정확한 최고/최저(02시 발표분)
         if (ext) { now.tmx = ext.tmx; now.tmn = ext.tmn; }
         // 체감온도: 기상청 생활기상지수 '체감온도' API 는 2026 데이터 생산중단으로 폐지됨.
         //  → 공식 API 없음. now.feels 는 fetchKmaNow 의 feelsLike(T,H,V) 계산식이 유일한 소스.
         const hourly = parseHourly(vil);
         const weekly = parseDaily(vil);
-        const alert = await safeCall(fetchKmaAlert, { active: false });  // 기상특보 (실패 시 미발령)
         WX_DATA = { now, hourly, weekly, alert };
         WX_SAMPLE = false;
         WX_STATE = "ready";
