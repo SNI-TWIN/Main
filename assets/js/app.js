@@ -533,27 +533,221 @@
     });
   }
 
-  /* ---------------- [중단 우] 공지 피드 ---------------- */
+  /* ---------------- [중단 우] 공지 피드 (구글 시트 + GAS 연동) ----------------
+   *  - 목록: NOTICE_URL(GAS) 에서 GET 으로 불러와 표시. 미설정/실패 시 config 샘플.
+   *  - 편집: '편집' 버튼 → 비밀번호(GET auth) → 편집기(작성/수정/삭제) → 저장(POST).
+   *    · 비밀번호는 시트 [설정] B1 에서 검증(코드에 노출 안 됨).
+   *    · POST 는 GAS 리다이렉트 CORS 때문에 no-cors(응답 못 읽음) → 저장 후 재조회로 확인.
+   * ------------------------------------------------------------------------ */
+  let NOTICE_CACHE = [];   // 마지막으로 불러온 공지 목록(편집기 초기값)
+
   function renderNoticeFeed() {
     const list = $id("noticeFeed");
     if (!list) return;
-    const notices = C.HOME_DATA.notices || [];
+
+    // 1) 우선 config 샘플로 즉시 렌더(네트워크 지연 동안 빈 화면 방지)
+    NOTICE_CACHE = (C.HOME_DATA.notices || []).slice();
+    paintNotices(NOTICE_CACHE);
+
+    // 2) NOTICE_URL 설정돼 있으면 시트의 실데이터로 교체
+    fetchNotices().then((arr) => {
+      if (arr) { NOTICE_CACHE = arr; paintNotices(arr); }
+    });
+
+    // 3) '편집' 버튼 → 비밀번호 → 편집기 (중복 바인딩 방지)
+    const edit = $id("noticeEdit");
+    if (edit && !edit.dataset.bound) {
+      edit.dataset.bound = "1";
+      edit.addEventListener("click", openNoticeAuth);
+    }
+  }
+
+  // 공지 목록을 화면에 그림(상위 3건). 제목은 textContent 로 넣어 안전 처리.
+  function paintNotices(notices) {
+    const list = $id("noticeFeed");
+    if (!list) return;
     list.innerHTML = "";
+    if (!notices.length) {
+      const empty = el(`<li class="feed__item"><span class="feed__text" style="color:#9ca3af;">등록된 공지가 없습니다.</span></li>`);
+      list.appendChild(empty);
+      return;
+    }
     notices.slice(0, 3).forEach((n) => {
-      const item = el(
-        `<li class="feed__item">
-           <span class="feed__dot"></span>
-           <span class="feed__text">${n.title}</span>
-         </li>`
-      );
+      const item = el(`<li class="feed__item"><span class="feed__dot"></span><span class="feed__text"></span></li>`);
+      item.querySelector(".feed__text").textContent = n.title;
       item.addEventListener("click", () => {
         if (n.url) window.open(n.url, "_blank", "noopener");
-        else toast("연결 주소가 아직 등록되지 않았어요");
+        else toast("연결 주소가 없는 공지예요");
       });
       list.appendChild(item);
     });
-    const more = $id("noticeMore");
-    if (more) more.addEventListener("click", () => toast("공지 전체보기는 준비 중이에요"));
+  }
+
+  // GAS 에서 공지 목록 GET (미설정/실패 시 null → 기존 표시 유지)
+  async function fetchNotices() {
+    const url = C.NOTICE_URL || "";
+    if (!url || url.indexOf("PLACEHOLDER") !== -1) return null;
+    try {
+      const res = await fetch(url + (url.indexOf("?") === -1 ? "?" : "&") + "action=list");
+      const json = await res.json();
+      if (json.result === "ok" && Array.isArray(json.notices)) return json.notices;
+    } catch (err) {
+      console.warn("[공지] 목록 불러오기 실패:", err);
+    }
+    return null;
+  }
+
+  // 편집 진입 — 관리자 비밀번호 입력 모달
+  function openNoticeAuth() {
+    const url = C.NOTICE_URL || "";
+    if (!url || url.indexOf("PLACEHOLDER") !== -1) {
+      toast("공지 연동 주소가 아직 설정되지 않았어요 (config.js NOTICE_URL)");
+      return;
+    }
+    const root = $id("overlayRoot");
+    const modal = el(
+      `<div class="overlay" style="position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(17,24,39,0.4);backdrop-filter:blur(2px);padding:28px;animation:fadeIn .2s ease;">
+         <div style="background:rgba(255,255,255,0.92);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);border:1px solid rgba(255,255,255,0.5);border-radius:22px;padding:26px 22px;max-width:330px;width:100%;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.18);animation:popIn .25s ease;">
+           <div style="width:50px;height:50px;margin:0 auto 14px;display:grid;place-items:center;border-radius:16px;background:var(--c-primary-soft);color:var(--c-icon-on);"><i data-lucide="lock" style="width:24px;height:24px;"></i></div>
+           <h3 style="font-size:16px;font-weight:800;margin-bottom:6px;letter-spacing:-0.02em;">공지글 편집</h3>
+           <p style="font-size:13px;color:#6b7280;margin-bottom:16px;">관리자 비밀번호를 입력하세요.</p>
+           <input id="notice-pw" type="password" autocomplete="off" placeholder="비밀번호"
+             style="width:100%;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;font-size:14px;margin-bottom:14px;box-sizing:border-box;" />
+           <button class="np-ok" type="button" style="width:100%;padding:12px;border-radius:14px;background:#4f46e5;color:#fff;font-size:14px;font-weight:700;">확인</button>
+           <button class="np-cancel" type="button" style="width:100%;padding:11px;margin-top:8px;border-radius:14px;background:transparent;color:#6b7280;font-size:13.5px;font-weight:600;">취소</button>
+         </div>
+       </div>`
+    );
+    const close = () => (root.innerHTML = "");
+    const submit = async () => {
+      const pw = (modal.querySelector("#notice-pw").value || "").trim();
+      if (!pw) { toast("비밀번호를 입력하세요"); return; }
+      const okBtn = modal.querySelector(".np-ok");
+      okBtn.disabled = true; okBtn.textContent = "확인 중...";
+      const ok = await verifyNoticePw(pw);
+      okBtn.disabled = false; okBtn.textContent = "확인";
+      if (!ok) { toast("비밀번호가 올바르지 않습니다"); return; }
+      close();
+      openNoticeEditor(pw);
+    };
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    modal.querySelector(".np-ok").addEventListener("click", submit);
+    modal.querySelector(".np-cancel").addEventListener("click", close);
+    modal.querySelector("#notice-pw").addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+    root.appendChild(modal); refreshIcons();
+    setTimeout(() => { const i = modal.querySelector("#notice-pw"); if (i) i.focus(); }, 50);
+  }
+
+  // 비밀번호 확인 (GET auth → 응답을 읽어 valid 판정)
+  async function verifyNoticePw(pw) {
+    const url = C.NOTICE_URL || "";
+    try {
+      const res = await fetch(url + (url.indexOf("?") === -1 ? "?" : "&") + "action=auth&pw=" + encodeURIComponent(pw));
+      const json = await res.json();
+      return json.result === "ok" && json.valid === true;
+    } catch (err) {
+      console.error("[공지] 비밀번호 확인 실패:", err);
+      toast("서버 연결에 실패했어요");
+      return false;
+    }
+  }
+
+  // 공지 편집기 — 행 단위 작성/수정/삭제 후 전체 저장
+  function openNoticeEditor(pw) {
+    const root = $id("overlayRoot");
+    const modal = el(
+      `<div class="overlay" style="position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(17,24,39,0.45);backdrop-filter:blur(2px);padding:20px;animation:fadeIn .2s ease;">
+         <div style="background:#fff;border-radius:22px;padding:22px 20px;max-width:480px;width:100%;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.2);animation:popIn .25s ease;">
+           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+             <h3 style="font-size:16.5px;font-weight:800;letter-spacing:-0.02em;">공지사항 편집</h3>
+             <button class="ne-add" type="button" style="font-size:13px;font-weight:700;color:#4f46e5;background:#eef2ff;border-radius:999px;padding:7px 14px;">+ 추가</button>
+           </div>
+           <div class="ne-rows" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;padding:2px;"></div>
+           <div style="display:flex;gap:8px;margin-top:16px;">
+             <button class="ne-cancel" type="button" style="flex:1;padding:12px;border-radius:14px;background:#f3f4f6;color:#374151;font-size:14px;font-weight:700;">취소</button>
+             <button class="ne-save" type="button" style="flex:2;padding:12px;border-radius:14px;background:#4f46e5;color:#fff;font-size:14px;font-weight:700;">저장</button>
+           </div>
+         </div>
+       </div>`
+    );
+    const rowsBox = modal.querySelector(".ne-rows");
+
+    const addRow = (n) => {
+      n = n || { title: "", date: "", url: "" };
+      const row = el(
+        `<div class="ne-row" style="border:1px solid #eef0f4;border-radius:14px;padding:12px;background:#fafbfc;position:relative;">
+           <button class="ne-del" type="button" title="삭제" style="position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:8px;background:#fef2f2;color:#dc2626;display:grid;place-items:center;border:none;cursor:pointer;"><i data-lucide="trash-2" style="width:15px;height:15px;"></i></button>
+           <input class="ne-title" type="text" placeholder="제목" style="width:100%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:10px;font-size:13.5px;margin-bottom:8px;box-sizing:border-box;" />
+           <div style="display:flex;gap:8px;">
+             <input class="ne-date" type="text" placeholder="날짜 (예: 06.05)" style="width:40%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:10px;font-size:13.5px;box-sizing:border-box;" />
+             <input class="ne-url" type="text" placeholder="링크 (선택)" style="width:60%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:10px;font-size:13.5px;box-sizing:border-box;" />
+           </div>
+         </div>`
+      );
+      row.querySelector(".ne-title").value = n.title || "";
+      row.querySelector(".ne-date").value = n.date || "";
+      row.querySelector(".ne-url").value = n.url || "";
+      row.querySelector(".ne-del").addEventListener("click", () => row.remove());
+      rowsBox.appendChild(row);
+      return row;
+    };
+
+    // 기존 공지로 채우되, 비어 있으면 빈 행 1개로 시작
+    (NOTICE_CACHE.length ? NOTICE_CACHE : [{ title: "", date: "", url: "" }]).forEach(addRow);
+
+    const close = () => (root.innerHTML = "");
+    modal.querySelector(".ne-add").addEventListener("click", () => {
+      const r = addRow();
+      rowsBox.scrollTop = rowsBox.scrollHeight;
+      refreshIcons();
+      r.querySelector(".ne-title").focus();
+    });
+    modal.querySelector(".ne-cancel").addEventListener("click", close);
+    modal.querySelector(".ne-save").addEventListener("click", async () => {
+      const notices = [];
+      rowsBox.querySelectorAll(".ne-row").forEach((row) => {
+        const title = row.querySelector(".ne-title").value.trim();
+        const date  = row.querySelector(".ne-date").value.trim();
+        const url   = row.querySelector(".ne-url").value.trim();
+        if (title) notices.push({ title, date, url });        // 제목 없는 행은 저장 제외
+      });
+      const saveBtn = modal.querySelector(".ne-save");
+      saveBtn.disabled = true; saveBtn.textContent = "저장 중...";
+      const ok = await saveNotices(pw, notices);
+      if (ok) {
+        paintNotices(NOTICE_CACHE);                            // 재조회로 최신화된 캐시 반영
+        close();
+        toast("공지사항이 저장되었습니다");
+      } else {
+        saveBtn.disabled = false; saveBtn.textContent = "저장";
+        toast("저장에 실패했어요. 다시 시도해 주세요");
+      }
+    });
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    root.appendChild(modal); refreshIcons();
+  }
+
+  // 전체 저장 (POST no-cors) → 잠시 후 재조회로 실제 저장 결과 반영
+  async function saveNotices(pw, notices) {
+    const url = C.NOTICE_URL || "";
+    if (!url || url.indexOf("PLACEHOLDER") !== -1) return false;
+    try {
+      await fetch(url, {
+        method: "POST",
+        mode: "no-cors",
+        redirect: "follow",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ pw, notices }),
+      });
+      // no-cors 는 응답을 못 읽으므로, 잠시 후 목록을 다시 읽어 저장을 확인/최신화
+      await new Promise((r) => setTimeout(r, 900));
+      const fresh = await fetchNotices();
+      NOTICE_CACHE = fresh || notices;
+      return true;   // 네트워크 예외가 없으면 접수로 간주 (read-back 으로 실제 상태 반영)
+    } catch (err) {
+      console.error("[공지] 저장 실패:", err);
+      return false;
+    }
   }
 
   /* ---------------- [하단] To-Do 피드 (필터 + 기억) ---------------- */

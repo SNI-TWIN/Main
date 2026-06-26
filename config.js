@@ -55,6 +55,17 @@ const WEATHER_PROXY_URL = "https://script.google.com/macros/s/AKfycbydZ6ad_2D1bQ
 const TWIN_VOICE_URL = "https://script.google.com/macros/s/AKfycbyrAXGDxNWRvySLgM8r6irX9mKr00DSlmOFxBEcIEWWiguyGrxYpt9nW_5WWVkxCB3rvA/exec";
 
 /* ---------------------------------------------------------------------
+ * 2-3) 공지사항 — 구글 시트(Apps Script) 연동 주소
+ *   - [트윈공지/Code.gs] 를 구글 앱스크립트에 새 프로젝트로 배포하고
+ *     (배포 > 새 배포 > 웹 앱 > 실행: 나 / 액세스: 모든 사용자),
+ *     발급받은 "웹 앱 URL(/exec)" 을 아래 따옴표 안에 붙여넣으세요.
+ *   - 공지 목록은 시트에서 읽어오고, 홈 화면의 '편집' 버튼 → 비밀번호 입력 후
+ *     작성/수정/삭제가 가능합니다. (비밀번호는 시트 [설정] B1 에서 관리)
+ *   - PLACEHOLDER 상태면 아래 HOME_DATA.notices 의 샘플 공지가 표시됩니다.
+ * ------------------------------------------------------------------- */
+const NOTICE_URL = "PLACEHOLDER_NOTICE_WEB_APP_URL";
+
+/* ---------------------------------------------------------------------
  * 3) 트윈 Chat-Bot '브릿지 스크린' 설정
  * ------------------------------------------------------------------- */
 const BRIDGE_CONFIG = {
@@ -161,7 +172,9 @@ const HOME_DATA = {
     lucide: "sun",               // 날씨 아이콘 (sun/cloud/cloud-rain/snowflake 등)
   },
 
-  // [중단 오른쪽] 공지 피드 (여러 개 리스트업)
+  // [중단 오른쪽] 공지 피드 — 샘플(폴백)용.
+  //  ※ NOTICE_URL 이 설정되면 구글 시트의 실제 공지로 자동 교체됩니다.
+  //    (평소 공지 관리는 코드가 아니라 홈 화면 '편집' 버튼 → 시트에서 합니다)
   notices: [
     { title: "트윈 피트니스 26년 3분기 정기 회원 모집 안내", date: "06.05", url: "" },
     { title: "6월 4일(목) 트윈 통근 퇴근버스 운행 안내", date: "06.04", url: "" },
@@ -204,7 +217,7 @@ const HOME_DATA = {
  * ------------------------------------------------------------------- */
 window.CONFIG = {
   APP_META, APP_ASSETS, BRIDGE_CONFIG, SERVICES, HOME_DATA,
-  TWIN_VOICE_URL,
+  TWIN_VOICE_URL, NOTICE_URL,
   KMA: {
     NX: KMA_NX, NY: KMA_NY, AREA_CODE: KMA_AREA_CODE, AREA_NO: KMA_AREA_NO,
     STN_ID: KMA_STN_ID, PROXY_URL: WEATHER_PROXY_URL,

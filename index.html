@@ -98,17 +98,15 @@
             <div class="wx-body" id="wxBody"><!-- app.js: 활성 탭 렌더 --></div>
           </div>
 
-          <!-- 공지 피드 -->
-          <div class="widget feed has-coming-soon">
+          <!-- 공지 피드 (구글 시트 연동: 편집 버튼 → 비밀번호 → 작성/수정/삭제) -->
+          <div class="widget feed">
             <div class="widget__head">
               <span class="widget__title">공지사항</span>
-              <button class="widget__more" id="noticeMore" type="button">전체</button>
+              <button class="widget__more" id="noticeEdit" type="button">
+                <i data-lucide="pencil" style="width:13px;height:13px;vertical-align:-1px;"></i> 편집
+              </button>
             </div>
             <ul class="feed__list" id="noticeFeed"><!-- app.js 주입 --></ul>
-            <!-- 준비중 글라스 오버레이 -->
-            <div class="coming-soon" aria-hidden="true">
-              <span class="coming-soon__badge"><i data-lucide="hammer"></i> 준비 중입니다</span>
-            </div>
           </div>
         </section>
 
