@@ -310,6 +310,21 @@
   const p2 = (n) => String(n).padStart(2, "0");
   const round1 = (x) => Math.round(x * 10) / 10;
 
+  // KMA 응답에서 item 배열을 안전하게 추출
+  //  - resultCode 가 "00"(정상)이 아니면(NO_DATA·쿼터초과·점검 등) 명시적 오류로 던짐
+  //  - item 이 단일 객체로 와도 배열로 정규화 (forEach/스프레드 안전)
+  //  → 기상청 비정상 응답에 TypeError 로 죽지 않고 '오류 상태 + 재시도'로 흐르게 함
+  function kmaItems_(json) {
+    const r = json && json.response;
+    const h = r && r.header;
+    if (!h || h.resultCode !== "00") {
+      throw new Error("KMA resultCode=" + (h ? h.resultCode : "?") + " " + ((h && h.resultMsg) || ""));
+    }
+    const item = r.body && r.body.items && r.body.items.item;
+    if (!item) throw new Error("KMA no items");
+    return Array.isArray(item) ? item : [item];
+  }
+
   // GAS 프록시 URL 빌더 — 키는 서버(트윈날씨/Code.gs)에만 보관, CORS 도 해결
   function kmaUrl(service, op, params) {
     const base = (C.KMA && C.KMA.PROXY_URL) || "";
@@ -340,7 +355,7 @@
     const res = await fetch(url);
     if (!res.ok) throw new Error("getUltraSrtNcst " + res.status);
     const json = await res.json();
-    const items = json.response.body.items.item;
+    const items = kmaItems_(json);
     const m = {};
     items.forEach((it) => { m[it.category] = it.obsrValue; });   // 코드→값 매핑
     const T = Number(m.T1H), H = Number(m.REH), V = Number(m.WSD), PTY = Number(m.PTY);
@@ -433,7 +448,7 @@
     const res = await fetch(url);
     if (!res.ok) throw new Error("getVilageFcst " + res.status);
     const json = await res.json();
-    return json.response.body.items.item;   // 원본 item 배열
+    return kmaItems_(json);   // 원본 item 배열(정상 응답 검증 + 단일객체 정규화)
   }
 
   // ② 시간별: TMP/POP/SKY/PTY/WSD/REH → 현재 이후 10슬롯
@@ -778,11 +793,15 @@
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ pw, notices }),
       });
-      // no-cors 는 응답을 못 읽으므로, 잠시 후 목록을 다시 읽어 저장을 확인/최신화
-      await new Promise((r) => setTimeout(r, 900));
+      // no-cors 는 응답을 못 읽으므로, 잠시 후 목록을 다시 읽어 '실제로 저장됐는지' 확인.
+      //  (서버는 저장 직후 캐시를 무효화하므로 read-back 은 최신값을 받음)
+      await new Promise((r) => setTimeout(r, 1400));
       const fresh = await fetchNotices();
-      NOTICE_CACHE = fresh || notices;
-      return true;   // 네트워크 예외가 없으면 접수로 간주 (read-back 으로 실제 상태 반영)
+      if (!fresh) { NOTICE_CACHE = notices; return true; }   // read-back 실패: 네트워크 예외 없으니 접수로 간주
+      NOTICE_CACHE = fresh;
+      // 보낸 제목 목록과 시트에 반영된 제목 목록을 비교(서버는 제목을 200자로 자르므로 동일 기준)
+      const norm = (arr) => arr.map((n) => String(n.title || "").slice(0, 200)).join("");
+      return norm(notices) === norm(fresh);
     } catch (err) {
       console.error("[공지] 저장 실패:", err);
       return false;

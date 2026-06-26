@@ -66,7 +66,9 @@ body {
 }
 body.weather-clear  .bg-blobs { background:linear-gradient(180deg,#e8f1ff 0%,#eef4fb 55%,#eef2f8 100%); }
 body.weather-cloudy .bg-blobs { background:linear-gradient(180deg,#e8ebf1 0%,#edf0f5 55%,#eef0f4 100%); }
-.blob { position:absolute; border-radius:50%; filter:blur(100px); opacity:0.26; }
+/* blur 반경을 100px→64px 로 낮춰 저사양 모바일의 초기 페인트/GPU 메모리 부담을 줄임
+   (시각적으로는 여전히 충분히 부드러운 블롭) */
+.blob { position:absolute; border-radius:50%; filter:blur(64px); opacity:0.26; }
 .blob--1 { width:440px; height:440px; background:#a5b4fc; top:-130px; left:-110px; }   /* 인디고 */
 .blob--2 { width:360px; height:360px; background:#99f6e4; top:8%;   right:-130px; }     /* 민트 */
 .blob--3 { width:400px; height:400px; background:#fbcfe8; bottom:-150px; left:-90px; }  /* 핑크 */
@@ -792,3 +794,16 @@ ul, li { list-style:none; }
 @keyframes slideIn{ from{transform:translateX(100%);} to{transform:translateX(0);} }
 @keyframes alertPulse{ 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.45;transform:scale(0.9);} }
 .sub-header .icon-btn, .slide-panel .icon-btn { width:34px; height:34px; }
+
+/* ====================== [18] 접근성·성능: 모션 최소화 =================
+   사용자가 OS에서 '동작 줄이기'를 켰거나 저사양 기기에서 무한 반복 애니메이션
+   (livePulse·alertPulse·skelShine·orbRipple·dotBounce 등)이 발열/배터리/버벅임을
+   유발할 때, 반복 애니메이션을 1회로 멈춰 부담을 줄인다. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
