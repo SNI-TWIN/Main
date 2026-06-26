@@ -555,6 +555,12 @@
    * ------------------------------------------------------------------------ */
   let NOTICE_CACHE = [];   // 마지막으로 불러온 공지 목록(편집기 초기값)
 
+  // 오늘 날짜를 "MM.DD" 로 (새 공지의 날짜 자동 입력용)
+  function todayStr() {
+    const d = new Date();
+    return String(d.getMonth() + 1).padStart(2, "0") + "." + String(d.getDate()).padStart(2, "0");
+  }
+
   function renderNoticeFeed() {
     const list = $id("noticeFeed");
     if (!list) return;
@@ -577,6 +583,7 @@
   }
 
   // 공지 목록을 화면에 그림(상위 3건). 제목은 textContent 로 넣어 안전 처리.
+  // 제목을 누르면 제목+내용 읽기 팝업이 뜸.
   function paintNotices(notices) {
     const list = $id("noticeFeed");
     if (!list) return;
@@ -587,14 +594,35 @@
       return;
     }
     notices.slice(0, 3).forEach((n) => {
-      const item = el(`<li class="feed__item"><span class="feed__dot"></span><span class="feed__text"></span></li>`);
+      const item = el(`<li class="feed__item" style="cursor:pointer;"><span class="feed__dot"></span><span class="feed__text"></span></li>`);
       item.querySelector(".feed__text").textContent = n.title;
-      item.addEventListener("click", () => {
-        if (n.url) openNewTab(n.url);
-        else toast("연결 주소가 없는 공지예요");
-      });
+      item.addEventListener("click", () => openNoticeView(n));
       list.appendChild(item);
     });
+  }
+
+  // 공지 읽기 팝업 — 제목 + 날짜 + 내용 전체 표시 (읽기 전용)
+  function openNoticeView(n) {
+    const root = $id("overlayRoot");
+    const modal = el(
+      `<div class="overlay" style="position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(17,24,39,0.45);backdrop-filter:blur(2px);padding:24px;animation:fadeIn .2s ease;">
+         <div style="background:#fff;border-radius:22px;padding:24px 22px;max-width:440px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.2);animation:popIn .25s ease;">
+           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;">
+             <h3 class="nv-title" style="font-size:17px;font-weight:800;letter-spacing:-0.02em;line-height:1.4;word-break:break-word;"></h3>
+             <button class="nv-close" type="button" aria-label="닫기" style="flex:none;width:30px;height:30px;border-radius:9px;background:#f3f4f6;color:#6b7280;display:grid;place-items:center;border:none;cursor:pointer;"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
+           </div>
+           <div class="nv-date" style="font-size:12.5px;color:#9ca3af;font-weight:600;margin-bottom:14px;"></div>
+           <div class="nv-content" style="font-size:14px;color:#374151;line-height:1.7;white-space:pre-wrap;word-break:break-word;overflow-y:auto;flex:1;"></div>
+         </div>
+       </div>`
+    );
+    modal.querySelector(".nv-title").textContent   = n.title || "";
+    modal.querySelector(".nv-date").textContent    = n.date || "";
+    modal.querySelector(".nv-content").textContent = n.content || "내용이 없습니다.";
+    const close = () => (root.innerHTML = "");
+    modal.querySelector(".nv-close").addEventListener("click", close);
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    root.appendChild(modal); refreshIcons();
   }
 
   // GAS 에서 공지 목록 GET (미설정/실패 시 null → 기존 표시 유지)
@@ -687,27 +715,24 @@
     const rowsBox = modal.querySelector(".ne-rows");
 
     const addRow = (n) => {
-      n = n || { title: "", date: "", url: "" };
+      n = n || { title: "", date: "", content: "" };
       const row = el(
         `<div class="ne-row" style="border:1px solid #eef0f4;border-radius:14px;padding:12px;background:#fafbfc;position:relative;">
            <button class="ne-del" type="button" title="삭제" style="position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:8px;background:#fef2f2;color:#dc2626;display:grid;place-items:center;border:none;cursor:pointer;"><i data-lucide="trash-2" style="width:15px;height:15px;"></i></button>
-           <input class="ne-title" type="text" placeholder="제목" style="width:100%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:10px;font-size:13.5px;margin-bottom:8px;box-sizing:border-box;" />
-           <div style="display:flex;gap:8px;">
-             <input class="ne-date" type="text" placeholder="날짜 (예: 06.05)" style="width:40%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:10px;font-size:13.5px;box-sizing:border-box;" />
-             <input class="ne-url" type="text" placeholder="링크 (선택)" style="width:60%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:10px;font-size:13.5px;box-sizing:border-box;" />
-           </div>
+           <input class="ne-title" type="text" placeholder="제목" style="width:calc(100% - 34px);padding:9px 11px;border:1px solid #e5e7eb;border-radius:10px;font-size:13.5px;margin-bottom:8px;box-sizing:border-box;" />
+           <textarea class="ne-content" rows="3" placeholder="내용을 입력하세요" style="width:100%;padding:9px 11px;border:1px solid #e5e7eb;border-radius:10px;font-size:13.5px;line-height:1.6;box-sizing:border-box;resize:vertical;min-height:72px;font-family:inherit;"></textarea>
          </div>`
       );
-      row.querySelector(".ne-title").value = n.title || "";
-      row.querySelector(".ne-date").value = n.date || "";
-      row.querySelector(".ne-url").value = n.url || "";
+      row.querySelector(".ne-title").value   = n.title || "";
+      row.querySelector(".ne-content").value = n.content || "";
+      row.dataset.date = n.date || "";   // 기존 날짜 보존(저장 시 사용)
       row.querySelector(".ne-del").addEventListener("click", () => row.remove());
       rowsBox.appendChild(row);
       return row;
     };
 
     // 기존 공지로 채우되, 비어 있으면 빈 행 1개로 시작
-    (NOTICE_CACHE.length ? NOTICE_CACHE : [{ title: "", date: "", url: "" }]).forEach(addRow);
+    (NOTICE_CACHE.length ? NOTICE_CACHE : [{ title: "", date: "", content: "" }]).forEach(addRow);
 
     const close = () => (root.innerHTML = "");
     modal.querySelector(".ne-add").addEventListener("click", () => {
@@ -720,10 +745,10 @@
     modal.querySelector(".ne-save").addEventListener("click", async () => {
       const notices = [];
       rowsBox.querySelectorAll(".ne-row").forEach((row) => {
-        const title = row.querySelector(".ne-title").value.trim();
-        const date  = row.querySelector(".ne-date").value.trim();
-        const url   = row.querySelector(".ne-url").value.trim();
-        if (title) notices.push({ title, date, url });        // 제목 없는 행은 저장 제외
+        const title   = row.querySelector(".ne-title").value.trim();
+        const content = row.querySelector(".ne-content").value.trim();
+        const date    = row.dataset.date || todayStr();       // 기존 날짜 유지, 새 글은 오늘 날짜 자동
+        if (title) notices.push({ title, content, date });    // 제목 없는 행은 저장 제외
       });
       const saveBtn = modal.querySelector(".ne-save");
       saveBtn.disabled = true; saveBtn.textContent = "저장 중...";
