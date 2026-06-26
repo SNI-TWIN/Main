@@ -323,6 +323,24 @@ ul, li { list-style:none; }
   transition:color var(--t-fast);
 }
 
+/* ── 준비중 글라스 오버레이 (공지/To-Do 등 미완성 카드 위에 덮음) ── */
+.has-coming-soon { position:relative; }
+.coming-soon {
+  position:absolute; inset:0; z-index:6; border-radius:inherit;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,0.45);
+  backdrop-filter:blur(3px) saturate(120%); -webkit-backdrop-filter:blur(3px) saturate(120%);
+  cursor:not-allowed;   /* 클릭 차단 + 준비중 인지 */
+}
+.coming-soon__badge {
+  display:inline-flex; align-items:center; gap:7px;
+  padding:9px 16px; border-radius:var(--r-full);
+  background:rgba(255,255,255,0.88);
+  border:1px solid var(--glass-border); box-shadow:0 6px 20px rgba(17,24,39,0.1);
+  font-size:12.5px; font-weight:700; color:var(--c-text-sub); letter-spacing:-0.01em;
+}
+.coming-soon__badge svg { width:15px; height:15px; color:var(--c-icon-on); }
+
 /* ====================== [7] To-Do 피드 (하단 메인) ======= */
 .todo-card {
   margin:0 var(--sp-4) var(--sp-6);

@@ -905,7 +905,7 @@
            <div class="voc__intro">
              <span class="voc__ico"><i data-lucide="inbox"></i></span>
              <h2 class="voc__title">트윈소리함</h2>
-             <p class="voc__sub">담당자에게만 비공개로 전달되는 1:1 제안함입니다.<br>자유롭게 의견·불편사항을 남겨주세요.</p>
+             <p class="voc__sub">센터장에게만 비공개로 전달되는 1:1 제안함입니다.<br>자유롭게 의견·불편사항을 남겨주세요.</p>
            </div>
 
            <label class="voc__opt">
@@ -1163,6 +1163,14 @@
     if (grid) grid.addEventListener("click", openAllMenu);
     const bell = $id("btnBell");
     if (bell) bell.addEventListener("click", () => toast("새로운 알림이 없어요"));
+
+    // 브랜드(사이드바 'Twin Work' / 모바일 헤더 로고·이름) 클릭 → 홈(대시보드)
+    document.querySelectorAll(".sidebar__brand, .app-header__left").forEach((brand) => {
+      brand.style.cursor = "pointer";
+      brand.setAttribute("role", "button");
+      brand.setAttribute("aria-label", "홈(대시보드)으로 이동");
+      brand.addEventListener("click", goHome);
+    });
   }
   function bindBottomNav() {
     document.querySelectorAll(".bottom-nav__item").forEach((item) => {

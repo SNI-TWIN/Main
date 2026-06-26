@@ -99,17 +99,25 @@
           </div>
 
           <!-- 공지 피드 -->
-          <div class="widget feed">
+          <div class="widget feed has-coming-soon">
             <div class="widget__head">
               <span class="widget__title">공지사항</span>
               <button class="widget__more" id="noticeMore" type="button">전체</button>
             </div>
             <ul class="feed__list" id="noticeFeed"><!-- app.js 주입 --></ul>
+            <!-- 준비중 글라스 오버레이 -->
+            <div class="coming-soon" aria-hidden="true">
+              <span class="coming-soon__badge"><i data-lucide="hammer"></i> 준비 중입니다</span>
+            </div>
           </div>
         </section>
 
         <!-- [하단] 트윈 To-Do 중요 업무 전달사항 (메인 피드) -->
-        <section class="todo-card">
+        <section class="todo-card has-coming-soon">
+          <!-- 준비중 글라스 오버레이 -->
+          <div class="coming-soon" aria-hidden="true">
+            <span class="coming-soon__badge"><i data-lucide="hammer"></i> 준비 중입니다</span>
+          </div>
           <div class="todo-card__head">
             <div class="todo-card__titlewrap">
               <i data-lucide="list-checks" class="todo-card__icon"></i>
