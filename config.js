@@ -45,11 +45,14 @@ const WEATHER_PROXY_URL = "https://script.google.com/macros/s/AKfycbydZ6ad_2D1bQ
 
 /* ---------------------------------------------------------------------
  * 2-2) 트윈소리함(비공개 VOC) — 구글 웹앱(Apps Script) 연동 주소
- *   - [트윈소리함/Code.gs] 를 구글 앱스크립트에 배포한 뒤,
- *     발급받은 "웹 앱 URL" 을 아래 따옴표 안에 그대로 붙여넣으세요.
+ *   - ★ 내용 기밀 유지를 위해 [트윈소리함/Code.gs] 와 저장 시트는 반드시
+ *     '센터장 계정(twin.eoc1@gmail.com)' 으로 생성·배포해야 합니다.
+ *     (그래야 sni.twintowers 등 다른 계정은 글 내용에 접근 불가)
+ *   - 그 계정에서 배포 후 발급받은 "웹 앱 URL(/exec)" 을 아래 따옴표 안에
+ *     그대로 붙여넣으세요.
  *   - PLACEHOLDER 상태면 실제 전송은 막히고 안내 메시지가 표시됩니다.
  * ------------------------------------------------------------------- */
-const TWIN_VOICE_URL = "https://script.google.com/macros/s/AKfycbyINukkPFLpj6fgRUDIrkmC92lRDhanYTPfZiE0ZDBSJjEf6HZaQwsQMgOqIAGyrmv3/exec";
+const TWIN_VOICE_URL = "https://script.google.com/macros/s/AKfycbyrAXGDxNWRvySLgM8r6irX9mKr00DSlmOFxBEcIEWWiguyGrxYpt9nW_5WWVkxCB3rvA/exec";
 
 /* ---------------------------------------------------------------------
  * 3) 트윈 Chat-Bot '브릿지 스크린' 설정
