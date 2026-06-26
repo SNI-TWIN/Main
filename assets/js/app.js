@@ -735,6 +735,7 @@
       case "bridge":   openBridge(s); break;
       case "iframe":   openIframe(s); break;
       case "external": openExternal(s); break;
+      case "applink":  openAppLink(s); break;
       case "voc":      renderVoc(s); break;
       case "modal":    openModal(s); break;
       default:         toast("알 수 없는 메뉴 타입");
@@ -745,6 +746,52 @@
   function openExternal(s) {
     if (!s.url) { toast(`${s.label} 주소가 아직 등록되지 않았어요`); return; }
     window.open(s.url, "_blank", "noopener");
+  }
+
+  // 설치형 외부 PWA 안내 팝업 (자체 푸시알림 보유 → iframe 불가)
+  //  - '열기' 버튼: 베스트에포트로 새 창 열기 (안드로이드는 설치 앱으로 전환될 수 있음)
+  //  - 안내 문구: 자동 실행이 안 되는 기기(특히 iOS)에서는 홈 화면 설치 앱으로 유도
+  function openAppLink(s) {
+    const root = $id("overlayRoot");
+    const appName = s.appName || s.label;
+    const modal = el(
+      `<div class="overlay" style="
+          position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+          background:rgba(17,24,39,0.4);backdrop-filter:blur(2px);padding:28px;animation:fadeIn .2s ease;">
+         <div style="background:rgba(255,255,255,0.9);backdrop-filter:blur(16px) saturate(160%);
+              -webkit-backdrop-filter:blur(16px) saturate(160%);border:1px solid rgba(255,255,255,0.5);
+              border-radius:22px;padding:28px 24px;max-width:340px;width:100%;
+              text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.18);animation:popIn .25s ease;">
+           <div style="width:54px;height:54px;margin:0 auto 14px;display:grid;place-items:center;
+                border-radius:16px;background:var(--c-primary-soft);color:var(--c-icon-on);">
+             <i data-lucide="${s.lucide || "bell-ring"}" style="width:26px;height:26px;"></i>
+           </div>
+           <h3 style="font-size:16.5px;font-weight:800;margin-bottom:8px;letter-spacing:-0.02em;">
+             ${appName} 앱에서 확인하세요
+           </h3>
+           <p style="font-size:13.5px;color:#6b7280;line-height:1.65;margin-bottom:20px;">
+             <b>${s.label}</b>은(는) 실시간 푸시 알림을 위해 별도 설치 앱
+             <b>${appName}</b>으로 운영됩니다.<br>
+             홈 화면의 <b>${appName}</b> 아이콘으로 열어 주세요.
+             아직 설치 전이라면 아래 버튼으로 접속해 ‘홈 화면에 추가’할 수 있습니다.
+           </p>
+           <button class="app-open" type="button" style="
+              width:100%;padding:12px;border-radius:14px;background:#4f46e5;color:#fff;
+              font-size:14px;font-weight:700;letter-spacing:-0.01em;">${appName} 열기</button>
+           <button class="app-close" type="button" style="
+              width:100%;padding:11px;margin-top:8px;border-radius:14px;background:transparent;
+              color:#6b7280;font-size:13.5px;font-weight:600;">닫기</button>
+         </div>
+       </div>`
+    );
+    const close = () => (root.innerHTML = "");
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    modal.querySelector(".app-open").addEventListener("click", () => {
+      if (s.url) window.open(s.url, "_blank", "noopener");
+      close();
+    });
+    modal.querySelector(".app-close").addEventListener("click", close);
+    root.appendChild(modal); refreshIcons();
   }
 
   // UI(홈 탭/뒤로 화살표)에서 홈으로: history 를 한 칸 되돌려 상태를 일치시킴

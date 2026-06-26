@@ -109,10 +109,14 @@ const SERVICES = [
     type: "iframe", url: "", status: "active",
   },
   {
-    // 재난대응매뉴얼 — 내장 HTML 탭 (현재 url 없으면 임시 화면)
+    // 재난대응매뉴얼 — 별도 설치형 PWA(자체 푸시알림 보유).
+    //  iframe 임베드 시 알림/설치가 막히고, 외부 자동실행은 OS·기기마다 불가할 수
+    //  있어(특히 iOS) → 안내 팝업(type: applink)으로 '설치 앱에서 열기'를 유도한다.
+    //  appName : 안내 문구에 표시할 설치 앱 이름
     id: "MENU-04", label: "재난대응매뉴얼", group: "SAFETY",
     lucide: "siren", icon: "assets/icons/disaster.png",
-    type: "iframe", url: "", status: "active",
+    type: "applink", url: "https://atssa-kim.github.io/twin-alarm/",
+    appName: "Twin-alarm", status: "active",
   },
   {
     // 트윈Safety — AppSheet 임베드 (법적 서명/위험성평가, ★ url 입력)
