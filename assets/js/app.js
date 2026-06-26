@@ -1024,28 +1024,23 @@
     btn.textContent = "제출 중...";
 
     try {
-      // GAS /exec 전송 패턴 (no-cors 제거 → 서버 결과로 성공/실패 '정확' 판정)
-      //  - text/plain : "단순 요청"이라 CORS preflight(OPTIONS) 없이 서버에 즉시 전달됨.
-      //                 (응답 차단과 무관하게 요청 자체는 서버가 받아 저장함)
-      //  - 1회만 전송 : 중복 저장 방지 (실패해도 재전송하지 않음)
-      const res = await fetch(TWIN_VOICE_URL, {
+      // GAS /exec 로의 POST 는 302 → googleusercontent 리다이렉트를 거치는데,
+      // 이 리다이렉트 응답에는 CORS 헤더가 없어, 브라우저(cors 모드)는 응답을
+      // 못 읽고 fetch 를 reject 합니다. (실제로는 서버에 전달·저장됐는데 '실패'로 오인)
+      //  → 따라서 no-cors 로 보냅니다. 응답은 opaque 라 읽을 수 없지만,
+      //    text/plain '단순 요청'이라 서버에는 정상 전달되어 시트 저장·메일 발송됩니다.
+      //    (엔드포인트 정상 동작은 서버측에서 사전 검증함)
+      //  ※ POST 응답을 읽어 성공/실패를 판정하려고 no-cors 를 제거하면, GAS 리다이렉트
+      //    CORS 때문에 정상 접수도 '전송 실패'로 뜨므로 절대 제거하지 말 것.
+      await fetch(TWIN_VOICE_URL, {
         method: "POST",
+        mode: "no-cors",
         redirect: "follow",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(payload),
       });
+      // no-cors 는 네트워크 자체가 끊긴 경우에만 예외 → 예외 없으면 접수로 간주.
 
-      // 응답 본문을 읽을 수 있으면 서버 결과(result)로 정확히 판정 → '조용한 실패' 차단.
-      //  - 일부 배포 환경은 CORS 로 응답을 못 읽음(res.json 예외) → 요청은 전달됐으므로
-      //    낙관 처리(serverResult=null). 단, 서버가 명시적 error 를 준 경우만 실패로 본다.
-      let serverResult = null;
-      try { serverResult = await res.json(); } catch (_) { /* opaque/CORS → 확인 불가 */ }
-
-      if (serverResult && serverResult.result === "error") {
-        throw new Error(serverResult.message || "서버 처리 실패");
-      }
-
-      // 성공(확인됨) 또는 확인불가(낙관) → 접수 안내 + 폼 초기화
       openInfoModal({
         lucide: "check-circle-2",
         title: "접수 완료",
@@ -1053,8 +1048,7 @@
       });
       resetVocForm(form);
     } catch (err) {
-      // 서버가 실패를 명시했거나(처리 실패) 네트워크 자체가 끊긴 경우
-      //  → 가짜 완료 대신 실패를 알리고, 폼은 보존해 재시도 가능하게 둠.
+      // 여기로 오는 경우는 '네트워크 자체가 끊긴' 진짜 실패뿐.
       console.error("[트윈소리함] 전송 실패:", err);
       toast("전송에 실패했어요. 네트워크 확인 후 다시 시도해 주세요");
     } finally {
