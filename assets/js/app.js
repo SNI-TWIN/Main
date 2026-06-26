@@ -932,8 +932,8 @@
    * ───────────────────────────────────────────────────────────────
    *  사용한 표준 ID (HTML은 이 함수가 동적 생성):
    *    #voc-form        : 폼 컨테이너 (form)
-   *    #voc-anon        : "익명으로 제출하기" 체크박스
-   *    #voc-named-group : [이름] 묶음 (익명 토글 대상)
+   *    #voc-named       : "이름 남기고 작성(실명)" 체크박스 (기본=미체크=익명)
+   *    #voc-named-group : [이름] 묶음 (실명 토글 대상)
    *    #voc-name        : 이름 입력
    *    #voc-title       : 제목 입력
    *    #voc-content     : 내용 입력(textarea)
@@ -956,11 +956,11 @@
            </div>
 
            <label class="voc__opt">
-             <input type="checkbox" id="voc-anon" />
-             <span><i data-lucide="venetian-mask"></i> 익명으로 제출하기</span>
+             <input type="checkbox" id="voc-named" />
+             <span><i data-lucide="user-round"></i> 이름 남기고 작성하기 <em style="font-style:normal;color:var(--c-text-mute);font-weight:500;">(기본은 익명)</em></span>
            </label>
 
-           <!-- 기명 입력 묶음: 익명 체크 시 부드럽게 숨김/비활성화 -->
+           <!-- 이름 입력 묶음: 실명 체크 시에만 부드럽게 펼침 (기본 익명=숨김) -->
            <div id="voc-named-group"
                 style="overflow:hidden;transition:max-height .3s ease,opacity .25s ease,margin .25s ease;">
              <input class="bm-input" id="voc-name" type="text"
@@ -997,28 +997,28 @@
     showView(s); refreshIcons();
   }
 
-  // 기명/익명 동적 UI 토글
-  //  - 해제(기명): 이름 노출 + required 활성
-  //  - 체크(익명): 이름 숨김 + disabled (required 우회) → 전송 시 "익명" 변환
+  // 실명/익명 동적 UI 토글 (기본=익명)
+  //  - 미체크(익명, 기본): 이름 숨김 + disabled (required 우회) → 전송 시 "익명"
+  //  - 체크(실명): 이름 노출 + required 활성 → 작성자 이름 입력 필수
   function bindVocAnonToggle(scope) {
-    const anon  = scope.querySelector("#voc-anon");
+    const named = scope.querySelector("#voc-named");
     const group = scope.querySelector("#voc-named-group");
     const name  = scope.querySelector("#voc-name");
 
     const apply = () => {
-      const isAnon = anon.checked;
+      const isNamed = named.checked;
       // 부드러운 펼침/접힘 (max-height 트랜지션)
       //  - 렌더 시점엔 viewPage 가 display:none 이라 scrollHeight 가 0 → 고정 상한값 사용
-      group.style.maxHeight = isAnon ? "0px" : "200px";
-      group.style.opacity   = isAnon ? "0" : "1";
-      group.style.marginBottom = isAnon ? "0px" : "";
-      // 숨김 시 required 해제 + disabled (검증 우회)
-      name.disabled = isAnon;
-      name.required = !isAnon;
+      group.style.maxHeight = isNamed ? "200px" : "0px";
+      group.style.opacity   = isNamed ? "1" : "0";
+      group.style.marginBottom = isNamed ? "" : "0px";
+      // 숨김(익명) 시 required 해제 + disabled (검증 우회)
+      name.disabled = !isNamed;
+      name.required = isNamed;
     };
 
-    apply();                                  // 초기 상태(기명) 반영
-    anon.addEventListener("change", apply);
+    apply();                                  // 초기 상태(익명) 반영
+    named.addEventListener("change", apply);
   }
 
   // 실시간 글자 수 카운터 (현재 / 1000자) + 상한 차단
@@ -1040,21 +1040,21 @@
   async function submitVoc() {
     const form    = $id("voc-form");
     const btn     = $id("voc-submit");
-    const anon    = $id("voc-anon").checked;
+    const named   = $id("voc-named").checked;     // 체크=실명, 미체크=익명(기본)
     const name    = ($id("voc-name").value || "").trim();
     const title   = ($id("voc-title").value || "").trim();
     const content = ($id("voc-content").value || "").trim();
 
-    // ── 유효성 검사 (익명일 때는 이름 우회) ──
-    if (!anon && !name) { toast("이름을 입력해 주세요"); return; }
+    // ── 유효성 검사 (실명일 때만 이름 필수) ──
+    if (named && !name) { toast("작성자 이름을 입력해 주세요"); return; }
     if (!title)   { toast("제목을 입력해 주세요"); return; }
     if (!content) { toast("내용을 입력해 주세요"); return; }
 
-    // 익명이면 이름을 자동 변환
+    // 익명(기본)이면 이름을 "익명" 으로 자동 변환
     const payload = {
       timestamp: fmtTs(new Date()),
-      isAnonymous: anon ? "익명" : "기명",
-      name: anon ? "익명" : name,
+      isAnonymous: named ? "기명" : "익명",
+      name: named ? name : "익명",
       title,
       content,
     };
@@ -1110,7 +1110,7 @@
   function resetVocForm(form) {
     if (!form) return;
     form.reset();                                                  // 모든 input/textarea/select 기본값
-    form.querySelector("#voc-anon").dispatchEvent(new Event("change")); // 기명 묶음 펼침 + required 재설정
+    form.querySelector("#voc-named").dispatchEvent(new Event("change")); // 이름 묶음 접힘(익명) + required 재설정
     form.querySelector("#voc-content").dispatchEvent(new Event("input")); // 카운터 0 으로
   }
 
