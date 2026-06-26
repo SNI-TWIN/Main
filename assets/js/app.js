@@ -36,6 +36,20 @@
   function findService(id) { return C.SERVICES.find((s) => s.id === id); }
   function refreshIcons() { if (window.lucide && lucide.createIcons) lucide.createIcons(); }
 
+  // 새 탭으로 외부 링크 열기 (크로스 플랫폼 안전)
+  //  - iOS(특히 홈 화면 PWA)는 window.open(url,'_blank','noopener') 의 features 인자
+  //    때문에 '팝업'으로 간주해 차단/무반응이 잦음. 임시 <a target=_blank> 클릭으로 회피.
+  function openNewTab(url) {
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   // Lucide 아이콘 박스 (+ 커스텀 PNG 있으면 페이드인 교체)
   function iconBox(service) {
     const box = el(`<div class="icon-box"><i data-lucide="${service.lucide || "square"}"></i></div>`);
@@ -576,7 +590,7 @@
       const item = el(`<li class="feed__item"><span class="feed__dot"></span><span class="feed__text"></span></li>`);
       item.querySelector(".feed__text").textContent = n.title;
       item.addEventListener("click", () => {
-        if (n.url) window.open(n.url, "_blank", "noopener");
+        if (n.url) openNewTab(n.url);
         else toast("연결 주소가 없는 공지예요");
       });
       list.appendChild(item);
@@ -939,7 +953,7 @@
   // 외부 포탈 새 창 라우팅 (인사관리포탈 등)
   function openExternal(s) {
     if (!s.url) { toast(`${s.label} 주소가 아직 등록되지 않았어요`); return; }
-    window.open(s.url, "_blank", "noopener");
+    openNewTab(s.url);
   }
 
   // 설치형 외부 PWA 안내 팝업 (자체 푸시알림 보유 → iframe 불가)
@@ -981,7 +995,7 @@
     const close = () => (root.innerHTML = "");
     modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
     modal.querySelector(".app-open").addEventListener("click", () => {
-      if (s.url) window.open(s.url, "_blank", "noopener");
+      if (s.url) openNewTab(s.url);
       close();
     });
     modal.querySelector(".app-close").addEventListener("click", close);
@@ -1069,11 +1083,11 @@
 
     // 메인: 챗봇 새 창 (팝업차단 회피 → 사용자 클릭 기반)
     screen.querySelector(".bridge__cta").addEventListener("click", () => {
-      window.open(s.url || B.ctaUrl, "_blank", "noopener");
+      openNewTab(s.url || B.ctaUrl);
     });
     // 서브: 권한 신청 링크 or 안내 모달
     screen.querySelector(".bridge__sub").addEventListener("click", () => {
-      if (B.permitUrl) window.open(B.permitUrl, "_blank", "noopener");
+      if (B.permitUrl) openNewTab(B.permitUrl);
       else openPermitModal();
     });
   }

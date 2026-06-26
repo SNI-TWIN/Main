@@ -63,25 +63,25 @@ const TWIN_VOICE_URL = "https://script.google.com/macros/s/AKfycbyrAXGDxNWRvySLg
  *     작성/수정/삭제가 가능합니다. (비밀번호는 시트 [설정] B1 에서 관리)
  *   - PLACEHOLDER 상태면 아래 HOME_DATA.notices 의 샘플 공지가 표시됩니다.
  * ------------------------------------------------------------------- */
-const NOTICE_URL = "PLACEHOLDER_NOTICE_WEB_APP_URL";
+const NOTICE_URL = "https://script.google.com/macros/s/AKfycbxbumWCNzeNHJFH8rTu2orQBmPRdYpvoQ7Z6wf47kuYsV7NBY3IbnJChvndzUd2q-fjxw/exec";
 
 /* ---------------------------------------------------------------------
  * 3) 트윈 Chat-Bot '브릿지 스크린' 설정
  * ------------------------------------------------------------------- */
 const BRIDGE_CONFIG = {
   // 로딩 중 굵은 안내 타이틀
-  title:   "트윈타워 운영 지식 가이드 AI를 연결하고 있습니다.",
+  title: "트윈타워 운영 지식 가이드 AI를 연결하고 있습니다.",
   // 권한 안내 (가볍고 작은 텍스트)
-  notice:  "본 챗봇은 사내 보안 문서가 학습되어 있어 승인된 구글 계정으로만 접근이 가능합니다. 브라우저의 로그인 상태를 확인해 주세요.",
-  lucide:  "bot",                  // 브릿지 중앙 아이콘 (Lucide)
+  notice: "본 챗봇은 사내 보안 문서가 학습되어 있어 승인된 구글 계정으로만 접근이 가능합니다. 브라우저의 로그인 상태를 확인해 주세요.",
+  lucide: "bot",                  // 브릿지 중앙 아이콘 (Lucide)
   loadingMs: 1500,                 // 로딩 애니메이션 노출 시간(ms)
 
   // 메인 버튼: 챗봇 새 창 연결
   ctaText: "트윈챗봇 바로가기",
-  ctaUrl:  "https://notebooklm.google.com/notebook/fd9bfa22-4d10-4015-a58f-658c0a15a016",   // ★ 실제 노트북LM 공유 주소
+  ctaUrl: "https://notebooklm.google.com/notebook/fd9bfa22-4d10-4015-a58f-658c0a15a016",   // ★ 실제 노트북LM 공유 주소
 
   // 서브 버튼: 권한 신청 (외부 링크 있으면 새 창, 없으면 안내 모달)
-  subText:   "챗봇 이용 권한 신청하기",
+  subText: "챗봇 이용 권한 신청하기",
   permitUrl: "",                   // ★ 권한 신청 폼 주소 (비우면 안내 모달)
 
   // 파스텔 그라데이션 (연 민트 → 라벤더)
@@ -183,29 +183,29 @@ const HOME_DATA = {
 
   // [하단] To-Do 필터 드롭다운 옵션 (value 는 아래 todos 의 part 와 일치해야 함)
   todoParts: [
-    { value: "all",    label: "전체" },
-    { value: "건축",   label: "건축" },
-    { value: "기계",   label: "기계" },
-    { value: "전기",   label: "전기" },
-    { value: "소방",   label: "소방" },
-    { value: "운영",   label: "운영" },
-    { value: "품질",   label: "품질" },
+    { value: "all", label: "전체" },
+    { value: "건축", label: "건축" },
+    { value: "기계", label: "기계" },
+    { value: "전기", label: "전기" },
+    { value: "소방", label: "소방" },
+    { value: "운영", label: "운영" },
+    { value: "품질", label: "품질" },
     { value: "센터장", label: "센터장" },
   ],
 
   // [하단] 트윈 To-Do 중요 업무 전달사항
   // priority: "High" | "Medium" | "Low" / part: 위 todoParts 의 value
   todos: [
-    { title: "B1F 전기실 정기 안전점검 결과 보고",   from: "전기파트장", part: "전기",   priority: "High",   done: false },
-    { title: "동관 공조설비 필터 교체 일정 확정",     from: "기계파트장", part: "기계",   priority: "High",   done: false },
-    { title: "지하주차장 배수펌프 작동 점검",         from: "기계파트장", part: "기계",   priority: "Medium", done: false },
-    { title: "옥상 방수층 균열 보수 범위 검토",       from: "건축파트장", part: "건축",   priority: "Medium", done: false },
-    { title: "외벽 석재 탈락 위험 구간 정밀 점검",     from: "건축파트장", part: "건축",   priority: "High",   done: false },
-    { title: "분기 소방 합동훈련 참가자 명단 취합",   from: "소방파트장", part: "소방",   priority: "Medium", done: true  },
-    { title: "스프링클러 헤드 교체 자재 발주",         from: "소방파트장", part: "소방",   priority: "Low",    done: false },
-    { title: "외주 미화팀 6월 근무표 검토",           from: "운영파트장", part: "운영",   priority: "Medium", done: false },
-    { title: "시설물 품질점검 체크리스트 갱신",       from: "품질파트장", part: "품질",   priority: "Low",    done: false },
-    { title: "6월 운영 정례회의 안건 정리",           from: "센터장",     part: "센터장", priority: "High",   done: false },
+    { title: "B1F 전기실 정기 안전점검 결과 보고", from: "전기파트장", part: "전기", priority: "High", done: false },
+    { title: "동관 공조설비 필터 교체 일정 확정", from: "기계파트장", part: "기계", priority: "High", done: false },
+    { title: "지하주차장 배수펌프 작동 점검", from: "기계파트장", part: "기계", priority: "Medium", done: false },
+    { title: "옥상 방수층 균열 보수 범위 검토", from: "건축파트장", part: "건축", priority: "Medium", done: false },
+    { title: "외벽 석재 탈락 위험 구간 정밀 점검", from: "건축파트장", part: "건축", priority: "High", done: false },
+    { title: "분기 소방 합동훈련 참가자 명단 취합", from: "소방파트장", part: "소방", priority: "Medium", done: true },
+    { title: "스프링클러 헤드 교체 자재 발주", from: "소방파트장", part: "소방", priority: "Low", done: false },
+    { title: "외주 미화팀 6월 근무표 검토", from: "운영파트장", part: "운영", priority: "Medium", done: false },
+    { title: "시설물 품질점검 체크리스트 갱신", from: "품질파트장", part: "품질", priority: "Low", done: false },
+    { title: "6월 운영 정례회의 안건 정리", from: "센터장", part: "센터장", priority: "High", done: false },
   ],
 
   // [하단] 컴팩트 서비스 바로가기 순서 (8개 → 4열 2행 꽉 참)
