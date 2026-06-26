@@ -103,10 +103,10 @@ const SERVICES = [
     type: "iframe", url: "", status: "active",
   },
   {
-    // 운영매뉴얼 — Google Sites 임베드 (★ url 입력)
+    // 운영매뉴얼 — Google Sites 임베드 (게시된 공개 사이트)
     id: "MENU-03", label: "운영매뉴얼", group: "WORK",
     lucide: "book-open", icon: "assets/icons/manual.png",
-    type: "iframe", url: "", status: "active",
+    type: "iframe", url: "https://sites.google.com/view/twintowersmanual/%ED%99%88", status: "active",
   },
   {
     // 재난대응매뉴얼 — 별도 설치형 PWA(자체 푸시알림 보유).
