@@ -5,7 +5,7 @@
  *  앱을 업데이트했는데 변경이 안 보이면 CACHE_VERSION 숫자만 올리세요.
  * ===================================================================== */
 
-const CACHE_VERSION = "connect-on-v2";       // ← 업데이트 시 v3, v4 ... 으로 변경
+const CACHE_VERSION = "connect-on-v3";       // ← 업데이트 시 v4, v5 ... 으로 변경 (아이콘 추가로 v3)
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -14,6 +14,10 @@ const CORE_ASSETS = [
   "./assets/css/style.css",
   "./assets/js/app.js",
   "./assets/vendor/lucide.min.js",
+  "./assets/icons/app_192.png",
+  "./assets/icons/app_512.png",
+  "./assets/icons/apple-touch-icon.png",
+  "./assets/icons/favicon-32.png",
 ];
 
 // 설치: 핵심 파일 미리 저장
