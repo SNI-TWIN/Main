@@ -1,0 +1,1184 @@
+/* =====================================================================
+ *  app.js — Twin Work 앱 엔진
+ * ---------------------------------------------------------------------
+ *  config.js(CONFIG)를 읽어 대시보드를 그리고 동작을 연결.
+ *  아이콘은 Lucide(라인 아이콘) 사용 → createIcons()로 <i>를 <svg>로 변환.
+ *  💡 내용/메뉴는 config.js에서 수정. 이 파일은 거의 손댈 일 없음.
+ * ===================================================================== */
+(function () {
+  "use strict";
+  const C = window.CONFIG;
+  if (!C) { console.error("config.js가 먼저 로드되어야 합니다."); return; }
+
+  document.addEventListener("DOMContentLoaded", init);
+
+  function init() {
+    applyBranding();
+    renderGreeting();
+    initWeather();
+    renderNoticeFeed();
+    initTodos();
+    renderShortcuts();
+    renderSidebar();
+    bindHeader();
+    bindBottomNav();
+    initHistory();            // 브라우저/Android 뒤로가기 → 홈 복귀
+    refreshIcons();           // Lucide <i> → <svg>
+  }
+
+  /* ---------------- 유틸 ---------------- */
+  const $id = (id) => document.getElementById(id);
+  function el(html) {
+    const t = document.createElement("template");
+    t.innerHTML = html.trim();
+    return t.content.firstElementChild;
+  }
+  function findService(id) { return C.SERVICES.find((s) => s.id === id); }
+  function refreshIcons() { if (window.lucide && lucide.createIcons) lucide.createIcons(); }
+
+  // Lucide 아이콘 박스 (+ 커스텀 PNG 있으면 페이드인 교체)
+  function iconBox(service) {
+    const box = el(`<div class="icon-box"><i data-lucide="${service.lucide || "square"}"></i></div>`);
+    if (service.icon) {
+      const img = new Image();
+      img.className = "icon-box__img";
+      img.alt = service.label;
+      img.onload = () => { img.classList.add("is-loaded"); box.classList.add("has-img"); };
+      img.onerror = () => img.remove();
+      img.src = service.icon;
+      box.appendChild(img);
+    }
+    return box;
+  }
+
+  /* ---------------- 브랜딩 ---------------- */
+  function applyBranding() {
+    const A = C.APP_ASSETS, M = C.APP_META;
+    setLogo($id("headerLogo"), A.logo);
+    setLogo($id("sidebarLogo"), A.logo);
+    if ($id("headerName")) $id("headerName").textContent = M.appName;
+    if ($id("sidebarTitle")) $id("sidebarTitle").textContent = M.appName;
+  }
+  function setLogo(imgEl, src) {
+    if (!imgEl || !src) return;
+    imgEl.onerror = () => { imgEl.style.display = "none"; };
+    imgEl.src = src;
+  }
+
+  /* ---------------- [상단] 인사말 ---------------- */
+  function renderGreeting() {
+    if ($id("greetLine")) $id("greetLine").textContent = C.HOME_DATA.greetingLine || "";
+  }
+
+  /* ================= [중단 좌] 기상청 날씨 엔진 (3탭 + 체감온도 + 특보) ================= */
+  let WX_TAB = "now";        // now | hourly | weekly
+  let WX_DATA = null;        // { now, hourly[], weekly[], alert }
+  let WX_STATE = "loading";  // loading(스켈레톤) | ready | error
+  let WX_SAMPLE = false;     // true 면 카드에 "샘플" 배지 표시 (가짜를 진짜처럼 안 보이기)
+
+  function initWeather() {
+    // 탭 전환 바인딩 (새로고침 없이 active 토글)
+    document.querySelectorAll(".wx-tab").forEach((t) => {
+      t.addEventListener("click", () => {
+        WX_TAB = t.dataset.wx;
+        document.querySelectorAll(".wx-tab").forEach((x) => x.classList.toggle("is-active", x === t));
+        renderWxTab();
+      });
+    });
+    loadWeatherData();   // 스켈레톤 → (프록시 미설정: 샘플+배지 / 설정: 실데이터 / 실패: 오류+재시도)
+  }
+
+  // ── 데이터 로드 (GAS 프록시 미설정이면 샘플+배지, 설정 시 KMA 프록시 호출) ──
+  async function loadWeatherData() {
+    const proxy = (C.KMA && C.KMA.PROXY_URL) || "";
+    const isPlaceholder = !proxy || /PLACEHOLDER/i.test(proxy);
+
+    WX_STATE = "loading";
+    renderWxTab();   // 스켈레톤 표시
+
+    if (isPlaceholder) {
+      WX_DATA = sampleWx();
+      WX_SAMPLE = true;
+      WX_STATE = "ready";
+      console.info("%c[KMA] 날씨 프록시(WEATHER_PROXY_URL) 미설정 → 샘플 데이터 + '샘플' 배지 표시 중.", "color:#6b7280");
+    } else {
+      try {
+        const now = await fetchKmaNow();          // 초단기실황(기온/습도/풍속/풍향/강수량)
+        const vil = await fetchKmaVilageRaw();     // 단기예보(시간별/주간/POP 공용)
+        Object.assign(now, parseTodayExtremes(vil));  // 강수확률 + 최고/최저 폴백
+        Object.assign(now, parseCurrentSky(vil));     // 하늘상태(SKY) 보정 → 맑음/구름많음/흐림
+        const ext = await safeCall(fetchKmaExtremes, null);  // 오늘 정확한 최고/최저(02시 발표분)
+        if (ext) { now.tmx = ext.tmx; now.tmn = ext.tmn; }
+        // 체감온도: 기상청 생활기상지수 '체감온도' API 는 2026 데이터 생산중단으로 폐지됨.
+        //  → 공식 API 없음. now.feels 는 fetchKmaNow 의 feelsLike(T,H,V) 계산식이 유일한 소스.
+        const hourly = parseHourly(vil);
+        const weekly = parseDaily(vil);
+        const alert = await safeCall(fetchKmaAlert, { active: false });  // 기상특보 (실패 시 미발령)
+        WX_DATA = { now, hourly, weekly, alert };
+        WX_SAMPLE = false;
+        WX_STATE = "ready";
+        console.info("%c[KMA] 실시간 기상 데이터 연동 완료", "color:#16a34a");
+      } catch (e) {
+        // 실패 시 가짜 데이터로 위장하지 않고 오류 상태 + 재시도 버튼 표시
+        console.error("[KMA] 프록시 호출 실패:", e);
+        WX_DATA = null;
+        WX_STATE = "error";
+      }
+    }
+    // 샘플 배지 토글
+    const tag = $id("wxSampleTag");
+    if (tag) tag.hidden = !(WX_STATE === "ready" && WX_SAMPLE);
+
+    if (WX_STATE === "ready") applyWeatherBg(WX_DATA.now.clear);
+    renderAlert();
+    renderWxTab();
+  }
+  async function safeCall(fn, fallback) {
+    try { return await fn(); } catch (e) { console.warn("[KMA] 부분 실패:", e); return fallback; }
+  }
+
+  /* ── 체감온도 자동 연산 ──
+   * 겨울(≤10°C): 풍속 기반 Wind Chill (V는 m/s → km/h 변환)
+   * 여름/평시: 기상청 약식 습도기반 체감온도(일사 미반영) */
+  function feelsLike(T, H, V) {
+    if (T <= 10) {
+      const vk = Math.pow(Math.max(V, 0.1) * 3.6, 0.16);
+      return 13.12 + 0.6215 * T - 11.37 * vk + 0.3965 * T * vk;
+    }
+    const Tw = T * Math.atan(0.151977 * Math.sqrt(H + 8.313659))
+      + Math.atan(T + H) - Math.atan(H - 1.67633)
+      + 0.00391838 * Math.pow(H, 1.5) * Math.atan(0.023101 * H) - 4.686035;
+    return -0.2442 + 0.55399 * Tw + 0.45535 * T - 0.0022 * Tw * Tw + 0.00278 * Tw * T + 3.0;
+  }
+
+  // 배경 동적 변경 (맑음/흐림)
+  function applyWeatherBg(clear) {
+    document.body.classList.remove("weather-clear", "weather-cloudy");
+    document.body.classList.add(clear ? "weather-clear" : "weather-cloudy");
+  }
+
+  // 풍향(deg) → 8방위
+  function windDir(deg) {
+    if (deg == null || isNaN(deg)) return "-";
+    const dirs = ["북", "북동", "동", "남동", "남", "남서", "서", "북서"];
+    return dirs[Math.round(Number(deg) / 45) % 8];
+  }
+
+  // KMA SKY/PTY 코드 → 한글 + Lucide
+  function kmaIcon(sky, pty) {
+    sky = Number(sky); pty = Number(pty);
+    if (pty === 1 || pty === 4) return { label: "비", lucide: "cloud-rain" };
+    if (pty === 2) return { label: "비/눈", lucide: "cloud-snow" };
+    if (pty === 3) return { label: "눈", lucide: "snowflake" };
+    if (sky === 1) return { label: "맑음", lucide: "sun" };
+    if (sky === 3) return { label: "구름많음", lucide: "cloud-sun" };
+    if (sky === 4) return { label: "흐림", lucide: "cloud" };
+    return { label: "맑음", lucide: "sun" };
+  }
+
+  /* ---------------- 렌더 ---------------- */
+  function renderAlert() {
+    const box = $id("alertBanner");
+    if (!box) return;
+    const wrap = box.closest(".alert-wrap") || box;
+    const a = (WX_DATA && WX_DATA.alert) || { active: false };
+    if (a.active) {
+      // 주의보/경보 감지 → 배너 노출
+      wrap.style.display = "";
+      box.className = "alert-banner is-on";
+      box.innerHTML =
+        `<span class="ab-ico"><i data-lucide="alert-triangle"></i></span>
+         <span class="ab-text"><b>${a.area || "서울"} [${a.title}]</b> 발효 중 — ${a.message || "안전에 유의하세요."}</span>`;
+      refreshIcons();
+    } else {
+      // 특보 없음 → 배너 숨김
+      wrap.style.display = "none";
+      box.className = "alert-banner is-off";
+      box.innerHTML = "";
+    }
+  }
+
+  function renderWxTab() {
+    const body = $id("wxBody");
+    if (!body) return;
+    // 로딩: 스켈레톤 (가짜 데이터로 위장하지 않음)
+    if (WX_STATE === "loading") { body.innerHTML = tplWxSkeleton(); return; }
+    // 오류: 안내 + 재시도 버튼
+    if (WX_STATE === "error" || !WX_DATA) {
+      body.innerHTML = tplWxError();
+      const retry = body.querySelector(".wx-error__retry");
+      if (retry) retry.addEventListener("click", loadWeatherData);
+      refreshIcons();
+      return;
+    }
+    if (WX_TAB === "now") body.innerHTML = tplNow(WX_DATA.now);
+    else if (WX_TAB === "hourly") body.innerHTML = tplHourly(WX_DATA.hourly);
+    else body.innerHTML = tplWeekly(WX_DATA.weekly);
+    refreshIcons();
+  }
+
+  // 스켈레톤 (현재 탭 레이아웃과 동일한 골격)
+  function tplWxSkeleton() {
+    const cells = Array(6).fill('<div class="skel wx-skel__cell"></div>').join("");
+    return `<div class="wx-skel">
+       <div class="wx-skel__top">
+         <div class="skel wx-skel__icon"></div>
+         <div class="skel wx-skel__temp"></div>
+       </div>
+       <div class="wx-skel__grid">${cells}</div>
+     </div>`;
+  }
+  // 오류 상태 (재시도 가능)
+  function tplWxError() {
+    return `<div class="wx-error">
+       <span class="wx-error__ico"><i data-lucide="cloud-off"></i></span>
+       <p class="wx-error__text">날씨 정보를 불러오지 못했어요.<br>네트워크 상태를 확인해 주세요.</p>
+       <button class="wx-error__retry" type="button">다시 시도</button>
+     </div>`;
+  }
+
+  function tplNow(n) {
+    const cell = (icon, label, val) =>
+      `<div class="wx-cell">
+         <span class="wx-cell__label"><i data-lucide="${icon}"></i>${label}</span>
+         <span class="wx-cell__val">${val}</span>
+       </div>`;
+    return `<div class="wx-now">
+       <div class="wx-now__top">
+         <div class="wx-now__icon"><i data-lucide="${n.lucide}"></i></div>
+         <div>
+           <div class="wx-now__temp">${n.temp}°</div>
+           <div class="wx-now__feels">체감 ${n.feels}°C · ${n.sky}</div>
+         </div>
+       </div>
+       <div class="wx-now__grid">
+         ${cell("thermometer", "최고/최저", `${n.tmx}° / ${n.tmn}°`)}
+         ${cell("umbrella", "강수확률", `${n.pop}%`)}
+         ${cell("cloud-rain", "강수량", `${n.rain}`)}
+         ${cell("wind", "풍속", `${n.wind}m/s`)}
+         ${cell("navigation", "풍향", `${n.windDir}`)}
+         ${cell("droplet", "습도", `${n.humidity}%`)}
+       </div>
+     </div>`;
+  }
+  // ② 시간별: 세로 리스트 [시간 | 아이콘 | 기온 | 강수·풍속·습도]
+  function tplHourly(arr) {
+    const rows = (arr || []).map((h) =>
+      `<div class="wx-row wx-row--h">
+         <span class="wx-row__time">${h.hour}시</span>
+         <span class="wx-row__ico"><i data-lucide="${h.lucide}"></i></span>
+         <span class="wx-row__temp">${h.temp}°</span>
+         <span class="wx-row__meta">
+           <span class="wx-chip wx-chip--pop"><i data-lucide="umbrella"></i>${h.pop}%</span>
+           <span class="wx-chip"><i data-lucide="wind"></i>${h.wind}㎧</span>
+           <span class="wx-chip"><i data-lucide="droplet"></i>${h.humidity}%</span>
+         </span>
+       </div>`).join("");
+    return `<div class="wx-list">${rows}</div>`;
+  }
+  // ③ 주간: 세로 리스트 [요일 | 오전 | 오후]
+  function tplWeekly(arr) {
+    const rows = (arr || []).map((d) =>
+      `<div class="wx-row wx-row--w">
+         <span class="wx-row__day">${d.label}</span>
+         <span class="wx-wcell"><span class="wx-wcell__tag">오전</span><i data-lucide="${d.amIcon}"></i><span class="wx-wcell__pop">${d.amPop}%</span></span>
+         <span class="wx-wcell"><span class="wx-wcell__tag">오후</span><i data-lucide="${d.pmIcon}"></i><span class="wx-wcell__pop">${d.pmPop}%</span></span>
+       </div>`).join("");
+    return `<div class="wx-list">${rows}</div>`;
+  }
+
+  /* ---------------- KMA 실호출 (GAS 프록시 경유) ---------------- */
+  const p2 = (n) => String(n).padStart(2, "0");
+  const round1 = (x) => Math.round(x * 10) / 10;
+
+  // GAS 프록시 URL 빌더 — 키는 서버(트윈날씨/Code.gs)에만 보관, CORS 도 해결
+  function kmaUrl(service, op, params) {
+    const base = (C.KMA && C.KMA.PROXY_URL) || "";
+    const qs = Object.keys(params).map((k) => `${k}=${encodeURIComponent(params[k])}`).join("&");
+    return `${base}${base.indexOf("?") === -1 ? "?" : "&"}service=${encodeURIComponent(service)}&op=${encodeURIComponent(op)}&${qs}`;
+  }
+
+  // 초단기실황 base: 매시 40분 이후 갱신 → 40분 여유
+  function kmaUltraBase() {
+    const d = new Date(Date.now() - 40 * 60000);
+    return { base_date: `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`, base_time: `${p2(d.getHours())}00` };
+  }
+  // 단기예보 base: 02,05,08,11,14,17,20,23시 중 직전
+  function kmaVilageBase() {
+    const slots = [23, 20, 17, 14, 11, 8, 5, 2];
+    const d = new Date(Date.now() - 10 * 60000);
+    let base = slots.find((s) => d.getHours() >= s);
+    if (base === undefined) { d.setDate(d.getDate() - 1); base = 23; }
+    return { base_date: `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`, base_time: `${p2(base)}00` };
+  }
+
+  // ① 초단기실황 → 현재 (T1H 기온 / REH 습도 / WSD 풍속 / PTY 강수형태)
+  async function fetchKmaNow() {
+    const { base_date, base_time } = kmaUltraBase();
+    const url = kmaUrl("VilageFcstInfoService_2.0", "getUltraSrtNcst", {
+      pageNo: 1, numOfRows: 10, base_date, base_time, nx: C.KMA.NX, ny: C.KMA.NY,
+    });
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("getUltraSrtNcst " + res.status);
+    const json = await res.json();
+    const items = json.response.body.items.item;
+    const m = {};
+    items.forEach((it) => { m[it.category] = it.obsrValue; });   // 코드→값 매핑
+    const T = Number(m.T1H), H = Number(m.REH), V = Number(m.WSD), PTY = Number(m.PTY);
+    const RN1 = m.RN1, VEC = Number(m.VEC);
+    const ic = kmaIcon(1, PTY);
+    return {
+      temp: Math.round(T), feels: round1(feelsLike(T, H, V)),
+      humidity: H, wind: V, windDir: windDir(VEC),
+      rain: (!RN1 || RN1 === "강수없음" || Number(RN1) === 0) ? "0mm" : `${RN1}mm`,
+      sky: ic.label, lucide: ic.lucide, clear: PTY === 0,
+      tmx: "-", tmn: "-", pop: 0,   // 단기예보에서 보강(loadWeatherData)
+    };
+  }
+
+  // 오늘 최고/최저(TMX/TMN) + 현재 이후 강수확률(POP) 추출
+  function parseTodayExtremes(items) {
+    const now = new Date();
+    const today = `${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}`;
+    const nowKey = `${today}${p2(now.getHours())}00`;
+    let tmx = null, tmn = null;
+    const todayTmps = [];
+    items.forEach((it) => {
+      if (it.fcstDate !== today) return;
+      if (it.category === "TMX") tmx = Math.round(Number(it.fcstValue));
+      if (it.category === "TMN") tmn = Math.round(Number(it.fcstValue));
+      if (it.category === "TMP") todayTmps.push(Number(it.fcstValue));
+    });
+    // TMX/TMN 미제공 시 오늘 TMP 범위로 폴백
+    if (tmx == null && todayTmps.length) tmx = Math.round(Math.max(...todayTmps));
+    if (tmn == null && todayTmps.length) tmn = Math.round(Math.min(...todayTmps));
+    // 현재 이후 가장 가까운 POP
+    const pops = items.filter((it) => it.category === "POP")
+      .sort((a, b) => (a.fcstDate + a.fcstTime).localeCompare(b.fcstDate + b.fcstTime));
+    const fut = pops.find((it) => (it.fcstDate + it.fcstTime) >= nowKey) || pops[0];
+    return { tmx: tmx == null ? "-" : tmx, tmn: tmn == null ? "-" : tmn, pop: fut ? Number(fut.fcstValue) : 0 };
+  }
+
+  // 현재 하늘상태(SKY) — 단기예보 가장 가까운 시각 (초단기실황엔 SKY가 없어 보정)
+  function parseCurrentSky(items) {
+    const byTime = {};
+    items.forEach((it) => {
+      const k = it.fcstDate + it.fcstTime;
+      (byTime[k] = byTime[k] || {})[it.category] = it.fcstValue;
+    });
+    const now = new Date();
+    const nowKey = `${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}${p2(now.getHours())}00`;
+    const keys = Object.keys(byTime).sort();
+    const k = keys.find((x) => x >= nowKey) || keys[0];
+    const o = byTime[k] || {};
+    const ic = kmaIcon(o.SKY, o.PTY);
+    return { sky: ic.label, lucide: ic.lucide, clear: Number(o.SKY) === 1 && Number(o.PTY || 0) === 0 };
+  }
+
+  // 날짜 YYYYMMDD
+  function ymd(d) { return `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`; }
+
+  // 오늘 정확한 최고/최저 — 02시 발표분(아침 TMN 포함). 03시 이전이면 전일 23시.
+  function kmaDayBase() {
+    const d = new Date();
+    if (d.getHours() < 3) { d.setDate(d.getDate() - 1); return { base_date: ymd(d), base_time: "2300" }; }
+    return { base_date: ymd(d), base_time: "0200" };
+  }
+  async function fetchKmaExtremes() {
+    const { base_date, base_time } = kmaDayBase();
+    const url = kmaUrl("VilageFcstInfoService_2.0", "getVilageFcst", {
+      pageNo: 1, numOfRows: 800, base_date, base_time, nx: C.KMA.NX, ny: C.KMA.NY,
+    });
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("getVilageFcst(ext) " + res.status);
+    const json = await res.json();
+    if (!json.response || !json.response.header || json.response.header.resultCode !== "00") throw new Error("ext no data");
+    const items = json.response.body.items.item;
+    const today = ymd(new Date());
+    let tmx = null, tmn = null;
+    items.forEach((it) => {
+      if (it.fcstDate !== today) return;
+      if (it.category === "TMX") tmx = Math.round(Number(it.fcstValue));
+      if (it.category === "TMN") tmn = Math.round(Number(it.fcstValue));
+    });
+    if (tmx == null && tmn == null) throw new Error("ext no tmx/tmn");
+    return { tmx: tmx == null ? "-" : tmx, tmn: tmn == null ? "-" : tmn };
+  }
+
+  // ②③ 단기예보 원본 1회 호출 (시간별 + 주간 공용)
+  async function fetchKmaVilageRaw() {
+    const { base_date, base_time } = kmaVilageBase();
+    const url = kmaUrl("VilageFcstInfoService_2.0", "getVilageFcst", {
+      pageNo: 1, numOfRows: 800, base_date, base_time, nx: C.KMA.NX, ny: C.KMA.NY,
+    });
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("getVilageFcst " + res.status);
+    const json = await res.json();
+    return json.response.body.items.item;   // 원본 item 배열
+  }
+
+  // ② 시간별: TMP/POP/SKY/PTY/WSD/REH → 현재 이후 10슬롯
+  function parseHourly(items) {
+    const byTime = {};
+    items.forEach((it) => {
+      const k = it.fcstDate + it.fcstTime;
+      (byTime[k] = byTime[k] || { _t: it.fcstTime })[it.category] = it.fcstValue;
+    });
+    const now = new Date();
+    const nowKey = `${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}${p2(now.getHours())}00`;
+    return Object.keys(byTime).sort().filter((k) => k >= nowKey).slice(0, 10).map((k) => {
+      const o = byTime[k]; const ic = kmaIcon(o.SKY, o.PTY);
+      return {
+        hour: Number(o._t.slice(0, 2)), temp: Number(o.TMP),
+        pop: Number(o.POP || 0), wind: Number(o.WSD || 0), humidity: Number(o.REH || 0),
+        lucide: ic.lucide,
+      };
+    });
+  }
+
+  // ③ 주간(단기예보 기간): 날짜별 오전/오후 대표 하늘상태·강수확률
+  function parseDaily(items) {
+    const days = ["일", "월", "화", "수", "목", "금", "토"];
+    const byDate = {};
+    items.forEach((it) => {
+      byDate[it.fcstDate] = byDate[it.fcstDate] || { am: {}, pm: {} };
+      const slot = Number(it.fcstTime.slice(0, 2)) < 12 ? "am" : "pm";
+      byDate[it.fcstDate][slot][it.category] = it.fcstValue;
+    });
+    const now = new Date();
+    const today = `${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}`;
+    return Object.keys(byDate).sort().filter((d) => d >= today).slice(0, 5).map((d) => {
+      const o = byDate[d];
+      const am = kmaIcon(o.am.SKY || o.pm.SKY, o.am.PTY || 0);
+      const pm = kmaIcon(o.pm.SKY || o.am.SKY, o.pm.PTY || 0);
+      const dt = new Date(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8));
+      return {
+        label: `${dt.getMonth() + 1}.${dt.getDate()}(${days[dt.getDay()]})`,
+        amIcon: am.lucide, pmIcon: pm.lucide,
+        amPop: Number(o.am.POP || 0), pmPop: Number(o.pm.POP || 0),
+      };
+    });
+  }
+
+  // ④ 기상특보 현황 (getWthrWrnMsg) → 주의보/경보 포함 시 배너 노출
+  async function fetchKmaAlert() {
+    const url = kmaUrl("WthrWrnInfoService", "getWthrWrnMsg", {
+      pageNo: 1, numOfRows: 10, stnId: (C.KMA && C.KMA.STN_ID) || 109,
+    });
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("getWthrWrnMsg " + res.status);
+    const json = await res.json();
+    const header = json.response && json.response.header;
+    // resultCode "03"(NO_DATA) = 발효 특보 없음 → 미발령으로 처리
+    if (!header || header.resultCode !== "00") return { active: false };
+    const body = json.response.body;
+    let item = body && body.items && body.items.item;
+    if (!item) return { active: false };
+    if (Array.isArray(item)) item = item[0];
+    // t6: 현재 발효 특보, t7: 예비특보, other: 기타문구
+    const text = (item && (item.t6 || item.t7 || item.other || "")) || "";
+    return parseAlertText(text);
+  }
+
+  // 특보 문장 파싱 → {active, title, level}
+  function parseAlertText(text) {
+    if (!text || !/(경보|주의보)/.test(text)) return { active: false };
+    const m = text.match(/([가-힣]{2,}(?:경보|주의보))/);   // 예: "강풍주의보"
+    const title = m ? m[1] : (/경보/.test(text) ? "기상경보" : "기상주의보");
+    const level = /경보/.test(title) ? "경보" : "주의보";
+    return { active: true, level, title, area: "서울·영등포", message: "현장 안전에 유의하세요." };
+  }
+
+  /* ---------------- 샘플 데이터 (키 없을 때 UI 표시용) ---------------- */
+  function sampleWx() {
+    const T = 26, H = 55, V = 2.3;
+    return {
+      now: {
+        temp: T, feels: round1(feelsLike(T, H, V)), humidity: H, wind: V,
+        windDir: "북서", rain: "0mm", sky: "맑음", lucide: "sun", clear: true,
+        tmx: 28, tmn: 19, pop: 20,
+      },
+      hourly: sampleHourly(),
+      weekly: sampleWeekly(),
+      alert: { active: false },   // 폴백 시 특보 미발령 (배너 숨김)
+    };
+  }
+  function sampleHourly() {
+    const base = new Date();
+    const temps = [26, 27, 27, 26, 25, 24, 23, 22, 21, 21];
+    const pops  = [0, 0, 10, 20, 30, 20, 10, 0, 0, 10];
+    const winds = [2.1, 2.4, 2.8, 3.1, 3.5, 2.9, 2.2, 1.8, 1.6, 1.5];
+    const hums  = [52, 50, 55, 60, 68, 64, 58, 55, 57, 60];
+    const ics = ["sun", "cloud-sun", "cloud", "cloud", "cloud-rain", "cloud", "cloud-sun", "moon", "moon", "cloud"];
+    return temps.map((t, i) => {
+      const h = new Date(base.getTime() + (i + 1) * 3600000);
+      return { hour: h.getHours(), temp: t, pop: pops[i], wind: winds[i], humidity: hums[i], lucide: ics[i] };
+    });
+  }
+  function sampleWeekly() {
+    const days = ["일", "월", "화", "수", "목", "금", "토"];
+    const base = new Date();
+    const data = [
+      ["sun", "sun", 0, 10], ["cloud-sun", "cloud", 10, 30], ["cloud", "cloud-rain", 30, 60],
+      ["cloud-rain", "cloud-rain", 70, 80], ["cloud", "cloud-sun", 40, 20], ["sun", "sun", 0, 0], ["cloud-sun", "cloud", 10, 20],
+    ];
+    return data.map((x, i) => {
+      const d = new Date(base.getTime() + (i + 1) * 86400000);
+      return { label: `${d.getMonth() + 1}.${d.getDate()}(${days[d.getDay()]})`, amIcon: x[0], pmIcon: x[1], amPop: x[2], pmPop: x[3] };
+    });
+  }
+
+  /* ---------------- [중단 우] 공지 피드 ---------------- */
+  function renderNoticeFeed() {
+    const list = $id("noticeFeed");
+    if (!list) return;
+    const notices = C.HOME_DATA.notices || [];
+    list.innerHTML = "";
+    notices.slice(0, 3).forEach((n) => {
+      const item = el(
+        `<li class="feed__item">
+           <span class="feed__dot"></span>
+           <span class="feed__text">${n.title}</span>
+         </li>`
+      );
+      item.addEventListener("click", () => {
+        if (n.url) window.open(n.url, "_blank", "noopener");
+        else toast("연결 주소가 아직 등록되지 않았어요");
+      });
+      list.appendChild(item);
+    });
+    const more = $id("noticeMore");
+    if (more) more.addEventListener("click", () => toast("공지 전체보기는 준비 중이에요"));
+  }
+
+  /* ---------------- [하단] To-Do 피드 (필터 + 기억) ---------------- */
+  const TODO_PART_KEY = "twinwork_todo_part";   // localStorage 키
+
+  function initTodos() {
+    // 1) 필터 드롭다운 옵션 채우기
+    const sel = $id("todoFilter");
+    const parts = C.HOME_DATA.todoParts || [{ value: "all", label: "전체" }];
+    if (sel) {
+      sel.innerHTML = "";
+      parts.forEach((p) => {
+        sel.appendChild(el(`<option value="${p.value}">${p.label}</option>`));
+      });
+      // 2) 저장된 파트 복원 (없으면 all). 저장값이 옵션에 없으면 all로 폴백
+      const saved = localStorage.getItem(TODO_PART_KEY) || "all";
+      sel.value = parts.some((p) => p.value === saved) ? saved : "all";
+      // 3) 변경 시 저장 + 다시 그리기
+      sel.addEventListener("change", () => {
+        localStorage.setItem(TODO_PART_KEY, sel.value);
+        renderTodoList();
+      });
+    }
+    // 4) 전체보기 → 트윈 To-Do(MENU-02)로 라우팅
+    const more = $id("todoMore");
+    if (more) more.addEventListener("click", () => gotoService("MENU-02"));
+
+    renderTodoList();
+  }
+
+  function currentPart() {
+    const sel = $id("todoFilter");
+    return sel ? sel.value : "all";
+  }
+
+  function renderTodoList() {
+    const list = $id("todoList");
+    if (!list) return;
+    const part = currentPart();
+    const all = C.HOME_DATA.todos || [];
+    const todos = part === "all" ? all : all.filter((t) => t.part === part);
+
+    list.innerHTML = "";
+    if (todos.length === 0) {
+      list.appendChild(el(
+        `<li class="todo-empty">
+           <span class="todo-empty__ico"><i data-lucide="clipboard-check"></i></span>
+           <span class="todo-empty__text">현재 등록된 중요 전달사항이 없습니다.</span>
+         </li>`
+      ));
+    } else {
+      todos.forEach((t) => {
+        const item = el(
+          `<li class="todo-item ${t.done ? "is-done" : ""}">
+             <button class="todo-check" type="button" aria-label="완료 토글">
+               <i data-lucide="check"></i>
+             </button>
+             <div style="flex:1;min-width:0;">
+               <div class="todo-item__text">${t.title}</div>
+               <div class="todo-item__from">${t.from || ""}${t.part ? " · " + t.part : ""}</div>
+             </div>
+             <span class="pri pri--${t.priority || "Low"}">${t.priority || "Low"}</span>
+           </li>`
+        );
+        item.querySelector(".todo-check").addEventListener("click", () => {
+          t.done = !t.done;
+          item.classList.toggle("is-done", t.done);
+          updateTodoBadge();
+        });
+        list.appendChild(item);
+      });
+    }
+    updateTodoBadge();
+    refreshIcons();   // 새로 그린 체크 아이콘 변환
+  }
+
+  // 현재 필터된 목록 기준 미결 건수
+  function updateTodoBadge() {
+    const part = currentPart();
+    const all = C.HOME_DATA.todos || [];
+    const scope = part === "all" ? all : all.filter((t) => t.part === part);
+    const open = scope.filter((t) => !t.done).length;
+
+    const badge = $id("todoBadge");
+    if (badge) badge.textContent = `미결 ${open}`;
+  }
+
+  /* ---------------- [하단] 컴팩트 서비스 그리드 ---------------- */
+  function renderShortcuts() {
+    const grid = $id("shortcutGrid");
+    if (!grid) return;
+    grid.innerHTML = "";
+    (C.HOME_DATA.shortcuts || []).forEach((id) => {
+      const s = findService(id);
+      if (!s) return;
+      const btn = el(
+        `<button class="shortcut ${s.status === "preparing" ? "is-preparing" : ""}" type="button">
+           <span class="shortcut__label">${s.label}</span>
+         </button>`
+      );
+      btn.prepend(iconBox(s));
+      btn.addEventListener("click", () => openService(s));
+      grid.appendChild(btn);
+    });
+  }
+
+  /* ---------------- 사이드바 ---------------- */
+  function renderSidebar() {
+    const nav = $id("sidebarNav");
+    if (!nav) return;
+    nav.innerHTML = "";
+
+    const home = sideItem({ id: "DASH-00", lucide: "layout-dashboard", label: "대시보드", status: "active" }, true);
+    home.addEventListener("click", () => { goHome(); setSideActive(home); });
+    nav.appendChild(home);
+
+    C.SERVICES.filter((s) => s.type !== "home").forEach((s) => {
+      const item = sideItem(s, false);
+      item.addEventListener("click", () => { openService(s); setSideActive(item); });
+      nav.appendChild(item);
+    });
+  }
+  function sideItem(s, active) {
+    return el(
+      `<button class="side-item ${active ? "is-active" : ""} ${s.status === "preparing" ? "is-preparing" : ""}"
+               type="button" data-sid="${s.id || ""}">
+         <span class="side-item__ico"><i data-lucide="${s.lucide || "square"}"></i></span>
+         <span>${s.label}</span>
+       </button>`
+    );
+  }
+
+  // 서비스로 이동 + 사이드바 활성 표시 동기화 (대시보드 위젯의 바로가기용)
+  function gotoService(id) {
+    const s = findService(id);
+    if (!s) return;
+    openService(s);
+    const sideEl = document.querySelector(`.side-item[data-sid="${id}"]`);
+    if (sideEl) setSideActive(sideEl);
+  }
+  function setSideActive(activeEl) {
+    document.querySelectorAll(".side-item").forEach((x) => x.classList.remove("is-active"));
+    activeEl.classList.add("is-active");
+  }
+
+  /* ---------------- 라우팅 (+ 브라우저/Android 뒤로가기 연동) ----------------
+   * 서브화면(브릿지/iframe/VOC)을 열 때 history 에 상태를 쌓아,
+   * Android 하드웨어 뒤로가기·브라우저 뒤로가기를 누르면 앱이 꺼지지 않고
+   * 홈 대시보드로 돌아오게 한다.
+   *  - 홈 → 서브: pushState (뒤로가기 1번이면 홈)
+   *  - 서브 → 다른 서브: replaceState (탭 전전 이력을 쌓지 않음 → 항상 홈으로 복귀)
+   * ------------------------------------------------------------------------ */
+  let POP_NAV = false;   // popstate 처리 중에는 pushState 금지 (무한 루프 방지)
+
+  function initHistory() {
+    // 시작점은 항상 홈 (해시 잔재 제거)
+    history.replaceState({ view: null }, "", location.pathname + location.search);
+    window.addEventListener("popstate", (e) => {
+      POP_NAV = true;
+      const id = e.state && e.state.view;
+      const s = id ? findService(id) : null;
+      if (s) openService(s);
+      else renderHome();
+      POP_NAV = false;
+    });
+  }
+
+  // 서브화면 진입을 history 에 기록
+  function syncHistory(s) {
+    if (POP_NAV || !s || !s.id) return;
+    const state = { view: s.id };
+    if (history.state && history.state.view) history.replaceState(state, "", "#" + s.id);
+    else history.pushState(state, "", "#" + s.id);
+  }
+
+  function openService(s) {
+    switch (s.type) {
+      case "home":     goHome(); break;
+      case "bridge":   openBridge(s); break;
+      case "iframe":   openIframe(s); break;
+      case "external": openExternal(s); break;
+      case "voc":      renderVoc(s); break;
+      case "modal":    openModal(s); break;
+      default:         toast("알 수 없는 메뉴 타입");
+    }
+  }
+
+  // 외부 포탈 새 창 라우팅 (인사관리포탈 등)
+  function openExternal(s) {
+    if (!s.url) { toast(`${s.label} 주소가 아직 등록되지 않았어요`); return; }
+    window.open(s.url, "_blank", "noopener");
+  }
+
+  // UI(홈 탭/뒤로 화살표)에서 홈으로: history 를 한 칸 되돌려 상태를 일치시킴
+  function goHome() {
+    if (history.state && history.state.view) { history.back(); return; }   // → popstate 가 renderHome 호출
+    renderHome();
+  }
+  // 실제 홈 DOM 렌더 (history 조작 없음)
+  function renderHome() {
+    $id("homePage").classList.remove("page--hidden");
+    const v = $id("viewPage");
+    v.classList.add("page--hidden"); v.innerHTML = "";
+    setBottomActive("home");
+    const dash = document.querySelector('.side-item[data-sid="DASH-00"]');
+    if (dash) setSideActive(dash);
+  }
+  function openIframe(s) {
+    const v = $id("viewPage");
+    v.innerHTML = "";
+    v.appendChild(subHeader(s.label));
+    if (s.url) {
+      // 실제 연동 주소가 있으면 iframe 임베드
+      v.appendChild(el(
+        `<iframe src="${s.url}" title="${s.label}"
+          style="width:100%;height:calc(100vh - var(--header-h) - 48px);border:0;"></iframe>`
+      ));
+    } else {
+      // 아직 주소 미등록 → 메뉴명 크게 뜨는 임시 플레이스홀더
+      v.appendChild(openPlaceholder(s));
+    }
+    showView(s); refreshIcons();
+  }
+
+  // 미완성 메뉴 임시 화면 (메뉴명 크게)
+  function openPlaceholder(s) {
+    return el(
+      `<div class="placeholder">
+         <span class="placeholder__ico"><i data-lucide="${s.lucide || "square"}"></i></span>
+         <h2 class="placeholder__name">${s.label}</h2>
+         <p class="placeholder__note">해당 서비스 화면을 준비하고 있습니다.</p>
+         <span class="placeholder__badge">COMING SOON</span>
+       </div>`
+    );
+  }
+  function openBridge(s) {
+    const B = C.BRIDGE_CONFIG;
+    const v = $id("viewPage");
+    v.innerHTML = "";
+    v.appendChild(subHeader(s.label));
+
+    const screen = el(
+      `<div class="bridge">
+         <div class="bridge__card" style="background:${B.gradient};">
+           <div class="bridge__orb"><i data-lucide="${B.lucide || "bot"}"></i></div>
+           <h2 class="bridge__title">${B.title}</h2>
+           <p class="bridge__notice">${B.notice || ""}</p>
+
+           <div class="bridge__dots"><span></span><span></span><span></span></div>
+
+           <div class="bridge__actions">
+             <button class="bridge__cta" type="button">
+               ${B.ctaText} <i data-lucide="arrow-up-right"></i>
+             </button>
+             <button class="bridge__sub" type="button">
+               ${B.subText || "권한 신청하기"} <i data-lucide="arrow-right"></i>
+             </button>
+           </div>
+         </div>
+       </div>`
+    );
+    v.appendChild(screen); showView(s); refreshIcons();
+
+    const dots = screen.querySelector(".bridge__dots");
+    const actions = screen.querySelector(".bridge__actions");
+
+    // 로딩 후: 점 애니메이션 숨기고 듀얼 버튼 노출
+    setTimeout(() => {
+      if (dots) dots.style.display = "none";
+      if (actions) actions.style.display = "flex";
+    }, B.loadingMs || 1500);
+
+    // 메인: 챗봇 새 창 (팝업차단 회피 → 사용자 클릭 기반)
+    screen.querySelector(".bridge__cta").addEventListener("click", () => {
+      window.open(s.url || B.ctaUrl, "_blank", "noopener");
+    });
+    // 서브: 권한 신청 링크 or 안내 모달
+    screen.querySelector(".bridge__sub").addEventListener("click", () => {
+      if (B.permitUrl) window.open(B.permitUrl, "_blank", "noopener");
+      else openPermitModal();
+    });
+  }
+
+  // 권한 신청 안내 모달 (permitUrl 미등록 시)
+  function openPermitModal() {
+    openInfoModal({
+      lucide: "key-round",
+      title: "챗봇 이용 권한 신청",
+      text: "트윈챗봇은 승인된 구글 계정에만 공개됩니다. 운영팀(내선 0000) 또는 담당자에게 계정 권한을 요청해 주세요.",
+    });
+  }
+  function subHeader(title) {
+    const head = el(
+      `<div class="sub-header">
+         <button class="sub-back icon-btn" type="button" aria-label="뒤로"><i data-lucide="arrow-left"></i></button>
+         <span class="sub-header__title">${title}</span>
+       </div>`
+    );
+    head.querySelector(".sub-back").addEventListener("click", goHome);
+    return head;
+  }
+  // 서브화면 표시 (+ 뒤로가기 history 기록)
+  function showView(s) {
+    $id("homePage").classList.add("page--hidden");
+    $id("viewPage").classList.remove("page--hidden");
+    syncHistory(s);
+  }
+
+  /* ================= 트윈소리함 (1:1 비밀 VOC 폼) =================
+   * 남이 쓴 글 목록은 노출하지 않는 '제출 전용' 폼.
+   * GAS(TWIN_VOICE_URL) 로 POST 하는 JSON payload 규격:
+   *   timestamp   : "YYYY-MM-DD HH:mm:SS"
+   *   isAnonymous : "익명" | "기명"
+   *   name        : 작성자 이름 (익명이면 "익명")
+   *   title       : 제목
+   *   content     : 본문 (최대 VOC_CONTENT_MAX 자)
+   * → Code.gs 가 [접수 시간|익명 여부|이름|제목|내용] 순으로 시트에 1행 append.
+   * ─────────────────────────────────────────────────────────────── */
+  const VOC_CONTENT_MAX = 1000;
+
+  // "YYYY-MM-DD HH:mm:SS" 포맷
+  function fmtTs(d) {
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+           `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+
+  /* 트윈소리함 화면 렌더
+   * ───────────────────────────────────────────────────────────────
+   *  사용한 표준 ID (HTML은 이 함수가 동적 생성):
+   *    #voc-form        : 폼 컨테이너 (form)
+   *    #voc-anon        : "익명으로 제출하기" 체크박스
+   *    #voc-named-group : [이름] 묶음 (익명 토글 대상)
+   *    #voc-name        : 이름 입력
+   *    #voc-title       : 제목 입력
+   *    #voc-content     : 내용 입력(textarea)
+   *    #voc-charcount   : 실시간 글자 수 카운터
+   *    #voc-submit      : 제출 버튼
+   *  ※ 디자인은 기존 클래스(voc__/bm-input)를 그대로 재사용.
+   * ─────────────────────────────────────────────────────────────── */
+  function renderVoc(s) {
+    const v = $id("viewPage");
+    v.innerHTML = "";
+    v.appendChild(subHeader(s.label));
+
+    const wrap = el(
+      `<div class="voc">
+         <form class="voc__card" id="voc-form" novalidate>
+           <div class="voc__intro">
+             <span class="voc__ico"><i data-lucide="inbox"></i></span>
+             <h2 class="voc__title">트윈소리함</h2>
+             <p class="voc__sub">담당자에게만 비공개로 전달되는 1:1 제안함입니다.<br>자유롭게 의견·불편사항을 남겨주세요.</p>
+           </div>
+
+           <label class="voc__opt">
+             <input type="checkbox" id="voc-anon" />
+             <span><i data-lucide="venetian-mask"></i> 익명으로 제출하기</span>
+           </label>
+
+           <!-- 기명 입력 묶음: 익명 체크 시 부드럽게 숨김/비활성화 -->
+           <div id="voc-named-group"
+                style="overflow:hidden;transition:max-height .3s ease,opacity .25s ease,margin .25s ease;">
+             <input class="bm-input" id="voc-name" type="text"
+                    placeholder="이름을 입력하세요" maxlength="20" required />
+           </div>
+
+           <input class="bm-input" id="voc-title" type="text"
+                  placeholder="제목을 입력하세요" maxlength="60" required />
+           <textarea class="bm-text" id="voc-content"
+                     placeholder="내용을 자유롭게 작성해 주세요. (최대 ${VOC_CONTENT_MAX}자)"
+                     maxlength="${VOC_CONTENT_MAX}" required></textarea>
+
+           <!-- 우측 하단 실시간 글자 수 카운터 -->
+           <div id="voc-charcount"
+                style="text-align:right;font-size:11.5px;font-weight:600;color:var(--c-text-mute);margin-top:4px;">
+             0 / ${VOC_CONTENT_MAX}자
+           </div>
+
+           <p class="voc__guard"><i data-lucide="lock"></i> 작성 내용은 다른 직원에게 공개되지 않습니다.</p>
+           <button class="voc__submit" id="voc-submit" type="submit">제출하기</button>
+         </form>
+       </div>`
+    );
+    v.appendChild(wrap);
+
+    bindVocAnonToggle(wrap);    // 기명/익명 동적 UI 토글
+    bindVocCharCounter(wrap);   // 실시간 글자 수 카운터
+    // 제출: form submit 가로채기(엔터/클릭 모두 커버) → 비동기 전송
+    wrap.querySelector("#voc-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      submitVoc();
+    });
+
+    showView(s); refreshIcons();
+  }
+
+  // 기명/익명 동적 UI 토글
+  //  - 해제(기명): 이름 노출 + required 활성
+  //  - 체크(익명): 이름 숨김 + disabled (required 우회) → 전송 시 "익명" 변환
+  function bindVocAnonToggle(scope) {
+    const anon  = scope.querySelector("#voc-anon");
+    const group = scope.querySelector("#voc-named-group");
+    const name  = scope.querySelector("#voc-name");
+
+    const apply = () => {
+      const isAnon = anon.checked;
+      // 부드러운 펼침/접힘 (max-height 트랜지션)
+      //  - 렌더 시점엔 viewPage 가 display:none 이라 scrollHeight 가 0 → 고정 상한값 사용
+      group.style.maxHeight = isAnon ? "0px" : "200px";
+      group.style.opacity   = isAnon ? "0" : "1";
+      group.style.marginBottom = isAnon ? "0px" : "";
+      // 숨김 시 required 해제 + disabled (검증 우회)
+      name.disabled = isAnon;
+      name.required = !isAnon;
+    };
+
+    apply();                                  // 초기 상태(기명) 반영
+    anon.addEventListener("change", apply);
+  }
+
+  // 실시간 글자 수 카운터 (현재 / 1000자) + 상한 차단
+  function bindVocCharCounter(scope) {
+    const ta = scope.querySelector("#voc-content");
+    const counter = scope.querySelector("#voc-charcount");
+    const update = () => {
+      // maxlength 가 1차 차단하지만, 붙여넣기/IME 등 우회 입력도 방어적으로 잘라냄
+      if (ta.value.length > VOC_CONTENT_MAX) ta.value = ta.value.slice(0, VOC_CONTENT_MAX);
+      counter.textContent = `${ta.value.length} / ${VOC_CONTENT_MAX}자`;
+      counter.style.color = ta.value.length >= VOC_CONTENT_MAX
+        ? "var(--c-primary)" : "var(--c-text-mute)";
+    };
+    ta.addEventListener("input", update);
+    update();
+  }
+
+  // VOC 제출 → JSON 파싱 → TWIN_VOICE_URL 로 비동기 POST → 완료 처리
+  async function submitVoc() {
+    const form    = $id("voc-form");
+    const btn     = $id("voc-submit");
+    const anon    = $id("voc-anon").checked;
+    const name    = ($id("voc-name").value || "").trim();
+    const title   = ($id("voc-title").value || "").trim();
+    const content = ($id("voc-content").value || "").trim();
+
+    // ── 유효성 검사 (익명일 때는 이름 우회) ──
+    if (!anon && !name) { toast("이름을 입력해 주세요"); return; }
+    if (!title)   { toast("제목을 입력해 주세요"); return; }
+    if (!content) { toast("내용을 입력해 주세요"); return; }
+
+    // 익명이면 이름을 자동 변환
+    const payload = {
+      timestamp: fmtTs(new Date()),
+      isAnonymous: anon ? "익명" : "기명",
+      name: anon ? "익명" : name,
+      title,
+      content,
+    };
+
+    // URL 미설정 가드 (배포 전 오작동 방지)
+    if (!TWIN_VOICE_URL || TWIN_VOICE_URL.indexOf("PLACEHOLDER") !== -1) {
+      toast("전송 주소가 아직 설정되지 않았어요 (config.js)");
+      return;
+    }
+
+    // ── 중복 클릭 방지: 버튼 잠금 ──
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "제출 중...";
+
+    try {
+      // GAS /exec 전송 패턴 (no-cors 제거 → 서버 결과로 성공/실패 '정확' 판정)
+      //  - text/plain : "단순 요청"이라 CORS preflight(OPTIONS) 없이 서버에 즉시 전달됨.
+      //                 (응답 차단과 무관하게 요청 자체는 서버가 받아 저장함)
+      //  - 1회만 전송 : 중복 저장 방지 (실패해도 재전송하지 않음)
+      const res = await fetch(TWIN_VOICE_URL, {
+        method: "POST",
+        redirect: "follow",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+      });
+
+      // 응답 본문을 읽을 수 있으면 서버 결과(result)로 정확히 판정 → '조용한 실패' 차단.
+      //  - 일부 배포 환경은 CORS 로 응답을 못 읽음(res.json 예외) → 요청은 전달됐으므로
+      //    낙관 처리(serverResult=null). 단, 서버가 명시적 error 를 준 경우만 실패로 본다.
+      let serverResult = null;
+      try { serverResult = await res.json(); } catch (_) { /* opaque/CORS → 확인 불가 */ }
+
+      if (serverResult && serverResult.result === "error") {
+        throw new Error(serverResult.message || "서버 처리 실패");
+      }
+
+      // 성공(확인됨) 또는 확인불가(낙관) → 접수 안내 + 폼 초기화
+      openInfoModal({
+        lucide: "check-circle-2",
+        title: "접수 완료",
+        text: "센터장님께 소중한 의견이 안전하게 비공개 접수되었습니다.",
+      });
+      resetVocForm(form);
+    } catch (err) {
+      // 서버가 실패를 명시했거나(처리 실패) 네트워크 자체가 끊긴 경우
+      //  → 가짜 완료 대신 실패를 알리고, 폼은 보존해 재시도 가능하게 둠.
+      console.error("[트윈소리함] 전송 실패:", err);
+      toast("전송에 실패했어요. 네트워크 확인 후 다시 시도해 주세요");
+    } finally {
+      // 성공/실패와 무관하게 버튼 원상복구
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+
+  // 폼 전체 초기화 (입력값/익명상태/카운터/토글 UI 복원)
+  //  - 리스너 중복 등록을 피하려고, 이미 바인딩된 핸들러를 이벤트로 재실행.
+  function resetVocForm(form) {
+    if (!form) return;
+    form.reset();                                                  // 모든 input/textarea/select 기본값
+    form.querySelector("#voc-anon").dispatchEvent(new Event("change")); // 기명 묶음 펼침 + required 재설정
+    form.querySelector("#voc-content").dispatchEvent(new Event("input")); // 카운터 0 으로
+  }
+
+  /* ---------------- 오버레이 ---------------- */
+  // 준비중 서비스 모달 → 공용 모달 재사용
+  function openModal(s) {
+    openInfoModal({
+      lucide: s.lucide || "info",
+      title: "잠시만요",
+      text: s.modalText || `${s.label}은(는) 준비 중이에요`,
+    });
+  }
+
+  // 공용 안내 모달 (아이콘 + 제목 + 본문 + 확인)
+  function openInfoModal({ lucide: ic = "info", title = "안내", text = "" }) {
+    const root = $id("overlayRoot");
+    const modal = el(
+      `<div class="overlay" style="
+          position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+          background:rgba(17,24,39,0.4);backdrop-filter:blur(2px);padding:28px;animation:fadeIn .2s ease;">
+         <div style="background:rgba(255,255,255,0.85);backdrop-filter:blur(16px) saturate(160%);
+              -webkit-backdrop-filter:blur(16px) saturate(160%);border:1px solid rgba(255,255,255,0.5);
+              border-radius:22px;padding:28px 24px;max-width:330px;width:100%;
+              text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.18);animation:popIn .25s ease;">
+           <div style="width:52px;height:52px;margin:0 auto 14px;display:grid;place-items:center;
+                border-radius:16px;background:var(--c-primary-soft);color:var(--c-icon-on);">
+             <i data-lucide="${ic}" style="width:24px;height:24px;"></i>
+           </div>
+           <h3 style="font-size:16px;font-weight:800;margin-bottom:8px;letter-spacing:-0.02em;">${title}</h3>
+           <p style="font-size:13.5px;color:#6b7280;line-height:1.6;margin-bottom:20px;">${text}</p>
+           <button class="modal-ok" type="button" style="
+              width:100%;padding:12px;border-radius:14px;background:#4f46e5;color:#fff;
+              font-size:14px;font-weight:600;letter-spacing:-0.01em;">확인</button>
+         </div>
+       </div>`
+    );
+    const close = () => (root.innerHTML = "");
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+    modal.querySelector(".modal-ok").addEventListener("click", close);
+    root.appendChild(modal); refreshIcons();
+  }
+
+  function openAllMenu() {
+    const root = $id("overlayRoot");
+    const panel = el(
+      `<div class="overlay" style="
+          position:fixed;inset:0;z-index:55;display:flex;justify-content:flex-end;
+          background:rgba(17,24,39,0.4);animation:fadeIn .2s ease;">
+         <div class="slide-panel" style="
+            width:84%;max-width:360px;height:100%;overflow-y:auto;
+            background:rgba(255,255,255,0.85);backdrop-filter:blur(16px) saturate(160%);
+            -webkit-backdrop-filter:blur(16px) saturate(160%);border-left:1px solid rgba(255,255,255,0.5);
+            padding:22px 16px;animation:slideIn .25s ease;box-shadow:-10px 0 40px rgba(0,0,0,.1);">
+           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+             <span style="font-size:17px;font-weight:800;letter-spacing:-0.02em;">전체 메뉴</span>
+             <button class="panel-close icon-btn" type="button" aria-label="닫기"><i data-lucide="x"></i></button>
+           </div>
+           <div class="panel-list"></div>
+         </div>
+       </div>`
+    );
+    const list = panel.querySelector(".panel-list");
+    C.SERVICES.forEach((s) => {
+      const item = el(
+        `<button class="panel-item" type="button" style="
+            display:flex;align-items:center;gap:13px;width:100%;padding:11px 6px;
+            border-bottom:1px solid var(--c-border);text-align:left;
+            ${s.status === "preparing" ? "opacity:.5;" : ""}">
+           <span style="font-size:13px;font-weight:600;flex:1;">${s.label}</span>
+           <i data-lucide="chevron-right" style="width:16px;height:16px;color:#c4c8cd;"></i>
+         </button>`
+      );
+      item.prepend(iconBox(s));
+      item.addEventListener("click", () => { root.innerHTML = ""; openService(s); });
+      list.appendChild(item);
+    });
+    const close = () => (root.innerHTML = "");
+    panel.addEventListener("click", (e) => { if (e.target === panel) close(); });
+    panel.querySelector(".panel-close").addEventListener("click", close);
+    root.appendChild(panel); refreshIcons();
+  }
+
+  function toast(msg) {
+    const root = $id("overlayRoot");
+    const t = el(
+      `<div style="position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:70;
+          background:rgba(17,24,39,0.92);color:#fff;font-size:13px;font-weight:500;
+          padding:10px 18px;border-radius:999px;animation:fadeIn .2s ease;max-width:80%;text-align:center;">${msg}</div>`
+    );
+    root.appendChild(t);
+    setTimeout(() => t.remove(), 2200);
+  }
+
+  /* ---------------- 헤더 / 하단탭 ---------------- */
+  function bindHeader() {
+    const grid = $id("btnGrid");
+    if (grid) grid.addEventListener("click", openAllMenu);
+    const bell = $id("btnBell");
+    if (bell) bell.addEventListener("click", () => toast("새로운 알림이 없어요"));
+  }
+  function bindBottomNav() {
+    document.querySelectorAll(".bottom-nav__item").forEach((item) => {
+      item.addEventListener("click", () => {
+        const nav = item.dataset.nav;
+        if (nav === "home") goHome();
+        else if (nav === "menu") openAllMenu();
+        else if (nav === "chatbot") { openService(findService("MENU-01")); setBottomActive("chatbot"); }
+        else if (nav === "manual") { openService(findService("MENU-03")); setBottomActive("manual"); }
+      });
+    });
+  }
+  function setBottomActive(nav) {
+    document.querySelectorAll(".bottom-nav__item").forEach((x) => {
+      x.classList.toggle("is-active", x.dataset.nav === nav);
+    });
+  }
+})();

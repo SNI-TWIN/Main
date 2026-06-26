@@ -1,0 +1,26 @@
+{
+  "name": "Twin Work - 트윈타워 스마트 워크",
+  "short_name": "Twin Work",
+  "description": "트윈타워 운영 서비스를 하나로 묶은 싱글 뷰 모바일 워크 플랫폼",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "assets/icons/app_192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/app_512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
