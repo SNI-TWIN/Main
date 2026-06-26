@@ -67,7 +67,7 @@ const BRIDGE_CONFIG = {
 
   // 메인 버튼: 챗봇 새 창 연결
   ctaText: "트윈챗봇 바로가기",
-  ctaUrl:  "https://notebooklm.google.com/notebook/fd9bfa22-4d10-4015-a58f-658c0a15a016/preview",   // ★ 실제 노트북LM 주소
+  ctaUrl:  "https://notebooklm.google.com/notebook/fd9bfa22-4d10-4015-a58f-658c0a15a016",   // ★ 실제 노트북LM 공유 주소
 
   // 서브 버튼: 권한 신청 (외부 링크 있으면 새 창, 없으면 안내 모달)
   subText:   "챗봇 이용 권한 신청하기",
