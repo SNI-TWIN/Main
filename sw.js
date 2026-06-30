@@ -5,7 +5,7 @@
  *  앱을 업데이트했는데 변경이 안 보이면 CACHE_VERSION 숫자만 올리세요.
  * ===================================================================== */
 
-const CACHE_VERSION = "connect-on-v3";       // ← 업데이트 시 v4, v5 ... 으로 변경 (아이콘 추가로 v3)
+const CACHE_VERSION = "connect-on-v4";       // ← 업데이트 시 v5, v6 ... 으로 변경 (공지 캐시 수정으로 v4)
 const CORE_ASSETS = [
   "./",
   "./index.html",

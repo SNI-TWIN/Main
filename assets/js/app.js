@@ -580,13 +580,15 @@
     const list = $id("noticeFeed");
     if (!list) return;
 
-    // 1) 우선 config 샘플로 즉시 렌더(네트워크 지연 동안 빈 화면 방지)
-    NOTICE_CACHE = (C.HOME_DATA.notices || []).slice();
-    paintNotices(NOTICE_CACHE);
+    // 1) 로딩 표시(네트워크 지연 동안 빈 화면 방지). 옛 샘플을 먼저 그리지 않음
+    //    → fetch 실패 시에만 샘플로 폴백하여 '예전 정보'가 잘못 노출되는 걸 막음
+    list.innerHTML = `<li class="feed__item"><span class="feed__text" style="color:#9ca3af;">공지사항을 불러오는 중…</span></li>`;
+    NOTICE_CACHE = (C.HOME_DATA.notices || []).slice();   // 편집기 초기값/폴백용으로만 보관
 
-    // 2) NOTICE_URL 설정돼 있으면 시트의 실데이터로 교체
+    // 2) NOTICE_URL 의 실데이터로 교체. 실패(null)면 그때만 config 샘플로 폴백
     fetchNotices().then((arr) => {
       if (arr) { NOTICE_CACHE = arr; paintNotices(arr); }
+      else { paintNotices(NOTICE_CACHE); }
     });
 
     // 3) '편집' 버튼 → 비밀번호 → 편집기 (중복 바인딩 방지)
@@ -641,11 +643,15 @@
   }
 
   // GAS 에서 공지 목록 GET (미설정/실패 시 null → 기존 표시 유지)
+  //  ※ 캐시 무력화: 매 요청마다 t=타임스탬프 + cache:"no-store" 로 항상 최신값을 받음.
+  //    (이게 없으면 브라우저가 동일 URL 응답을 디스크 캐시 → 옛 공지가 계속 떠서
+  //     "새로고침 여러 번 해야 갱신" 증상이 생김)
   async function fetchNotices() {
     const url = C.NOTICE_URL || "";
     if (!url || url.indexOf("PLACEHOLDER") !== -1) return null;
     try {
-      const res = await fetch(url + (url.indexOf("?") === -1 ? "?" : "&") + "action=list");
+      const sep = url.indexOf("?") === -1 ? "?" : "&";
+      const res = await fetch(url + sep + "action=list&t=" + Date.now(), { cache: "no-store" });
       const json = await res.json();
       if (json.result === "ok" && Array.isArray(json.notices)) return json.notices;
     } catch (err) {
@@ -699,7 +705,8 @@
   async function verifyNoticePw(pw) {
     const url = C.NOTICE_URL || "";
     try {
-      const res = await fetch(url + (url.indexOf("?") === -1 ? "?" : "&") + "action=auth&pw=" + encodeURIComponent(pw));
+      const sep = url.indexOf("?") === -1 ? "?" : "&";
+      const res = await fetch(url + sep + "action=auth&t=" + Date.now() + "&pw=" + encodeURIComponent(pw), { cache: "no-store" });
       const json = await res.json();
       return json.result === "ok" && json.valid === true;
     } catch (err) {
@@ -794,8 +801,9 @@
         body: JSON.stringify({ pw, notices }),
       });
       // no-cors 는 응답을 못 읽으므로, 잠시 후 목록을 다시 읽어 '실제로 저장됐는지' 확인.
-      //  (서버는 저장 직후 캐시를 무효화하므로 read-back 은 최신값을 받음)
-      await new Promise((r) => setTimeout(r, 1400));
+      //  (서버는 저장 직후 캐시를 무효화하고, read-back 은 cache-bust 로 최신값을 받음)
+      //  ※ 시트 쓰기 반영에 필요한 최소 시간만 대기(과거 1400ms → 500ms 로 단축).
+      await new Promise((r) => setTimeout(r, 500));
       const fresh = await fetchNotices();
       if (!fresh) { NOTICE_CACHE = notices; return true; }   // read-back 실패: 네트워크 예외 없으니 접수로 간주
       NOTICE_CACHE = fresh;
