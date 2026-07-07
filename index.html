@@ -21,15 +21,27 @@
   <!-- iOS 홈 화면 아이콘 (iOS는 manifest 아이콘을 무시하므로 필수, 180x180 권장) -->
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
 
-  <!-- 폰트: Pretendard -->
-  <link rel="stylesheet" as="style" crossorigin
+  <!-- ⚡ 원격 서버 미리 연결(TLS 핸드셰이크 선처리) — 폰트 CDN / 날씨·공지 프록시(GAS) / 푸시 SDK -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preconnect" href="https://script.google.com" />
+  <link rel="preconnect" href="https://script.googleusercontent.com" />
+  <link rel="preconnect" href="https://www.gstatic.com" />
+
+  <!-- 폰트: Pretendard — 렌더링을 막지 않도록 비동기 로드 (로드 전엔 시스템 폰트로 먼저 표시) -->
+  <link rel="stylesheet" crossorigin media="print" onload="this.media='all'"
         href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+  <noscript>
+    <link rel="stylesheet" crossorigin
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+  </noscript>
 
   <!-- 디자인 -->
   <link rel="stylesheet" href="assets/css/style.css" />
 
-  <!-- ⚡ Lucide Icons (셀프호스팅 v1.17.0 — CDN 장애/버전 변경/오프라인에도 안전) -->
-  <script src="assets/vendor/lucide.min.js"></script>
+  <!-- ⚡ Lucide Icons (셀프호스팅 — CDN 장애/오프라인에도 안전)
+       defer: 396KB 파싱이 첫 화면 그리기를 막지 않도록 비동기화.
+       app.js 는 DOMContentLoaded 에서 실행되므로(=defer 스크립트 완료 후) 순서 안전. -->
+  <script src="assets/vendor/lucide.min.js" defer></script>
 </head>
 
 <body>
@@ -175,9 +187,9 @@
   <!-- D. 오버레이(전체메뉴/모달/토스트) 루트 -->
   <div class="overlay-root" id="overlayRoot"></div>
 
-  <!-- 스크립트 (config → app) -->
-  <script src="config.js"></script>
-  <script src="assets/js/app.js"></script>
+  <!-- 스크립트 (config → app) — defer 로 HTML 파싱을 막지 않음(실행 순서는 유지됨) -->
+  <script src="config.js" defer></script>
+  <script src="assets/js/app.js" defer></script>
 
   <script>
     /* ───────────────────────────────────────────────
@@ -190,9 +202,13 @@
 
     if ("serviceWorker" in navigator) {
       if (DEV_MODE) {
-        // 등록된 SW 전부 해제
+        // 등록된 SW 전부 해제 (푸시 수신용 FCM 워커는 유지 — 지우면 구독이 끊김)
         navigator.serviceWorker.getRegistrations().then(function (regs) {
-          regs.forEach(function (r) { r.unregister(); });
+          regs.forEach(function (r) {
+            var u = (r.active && r.active.scriptURL) || "";
+            if (u.indexOf("firebase-messaging-sw") !== -1) return;
+            r.unregister();
+          });
         });
         // 캐시 스토리지 비우기
         if (window.caches && caches.keys) {

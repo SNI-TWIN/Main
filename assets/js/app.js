@@ -23,6 +23,7 @@
     bindHeader();
     bindBottomNav();
     initHistory();            // 브라우저/Android 뒤로가기 → 홈 복귀
+    initPush();               // 휴대폰 푸시(Firebase FCM) 초기화 — 설정 미완료 시 자동 스킵
     refreshIcons();           // Lucide <i> → <svg>
   }
 
@@ -102,13 +103,37 @@
     loadWeatherData();   // 스켈레톤 → (프록시 미설정: 샘플+배지 / 설정: 실데이터 / 실패: 오류+재시도)
   }
 
+  /* ── 날씨 로컬 캐시 (체감 속도) ──
+   *  GAS 프록시는 콜드스타트 시 1~3초 걸림 → 마지막 성공 데이터(1시간 이내)를
+   *  localStorage 에 보관해 두고 즉시 표시, 네트워크 조회는 뒤에서 조용히 진행. */
+  const WX_LS_KEY = "twin_wx_cache";
+  const WX_LS_TTL = 60 * 60 * 1000;   // 1시간
+  function readWxCache() {
+    try {
+      const o = JSON.parse(localStorage.getItem(WX_LS_KEY) || "null");
+      if (o && o.t && o.data && (Date.now() - o.t) < WX_LS_TTL) return o.data;
+    } catch (e) {}
+    return null;
+  }
+  function saveWxCache(data) {
+    try { localStorage.setItem(WX_LS_KEY, JSON.stringify({ t: Date.now(), data })); } catch (e) {}
+  }
+
   // ── 데이터 로드 (GAS 프록시 미설정이면 샘플+배지, 설정 시 KMA 프록시 호출) ──
   async function loadWeatherData() {
     const proxy = (C.KMA && C.KMA.PROXY_URL) || "";
     const isPlaceholder = !proxy || /PLACEHOLDER/i.test(proxy);
 
-    WX_STATE = "loading";
-    renderWxTab();   // 스켈레톤 표시
+    // 최근 성공 데이터가 있으면 스켈레톤 없이 즉시 표시 (뒤에서 최신값으로 교체)
+    const cached = !isPlaceholder ? readWxCache() : null;
+    if (cached) {
+      WX_DATA = cached; WX_SAMPLE = false; WX_STATE = "ready";
+      applyWeatherBg(cached.now && cached.now.clear);
+      renderAlert();
+    } else {
+      WX_STATE = "loading";
+    }
+    renderWxTab();   // 캐시 표시 or 스켈레톤
 
     if (isPlaceholder) {
       WX_DATA = sampleWx();
@@ -136,12 +161,18 @@
         WX_DATA = { now, hourly, weekly, alert };
         WX_SAMPLE = false;
         WX_STATE = "ready";
+        saveWxCache(WX_DATA);   // 다음 방문 즉시 표시용
         console.info("%c[KMA] 실시간 기상 데이터 연동 완료", "color:#16a34a");
       } catch (e) {
-        // 실패 시 가짜 데이터로 위장하지 않고 오류 상태 + 재시도 버튼 표시
         console.error("[KMA] 프록시 호출 실패:", e);
-        WX_DATA = null;
-        WX_STATE = "error";
+        if (cached) {
+          // 캐시를 이미 보여준 상태 → 오류 화면으로 갈아엎지 않고 그대로 유지
+          console.warn("[KMA] 갱신 실패 — 최근 캐시 데이터를 유지합니다.");
+        } else {
+          // 보여줄 게 없을 때만 오류 상태 + 재시도 버튼 (가짜 데이터로 위장하지 않음)
+          WX_DATA = null;
+          WX_STATE = "error";
+        }
       }
     }
     // 샘플 배지 토글
@@ -576,19 +607,37 @@
     return String(d.getMonth() + 1).padStart(2, "0") + "." + String(d.getDate()).padStart(2, "0");
   }
 
+  // 마지막으로 성공한 공지 목록(localStorage) — 재방문 시 GAS 응답(1~2초)을
+  // 기다리지 않고 즉시 표시하기 위한 로컬 캐시
+  const NOTICE_LS_KEY = "twin_notice_lastok";
+  function readNoticeLs() {
+    try {
+      const a = JSON.parse(localStorage.getItem(NOTICE_LS_KEY) || "null");
+      return Array.isArray(a) ? a : null;
+    } catch (e) { return null; }
+  }
+
   function renderNoticeFeed() {
     const list = $id("noticeFeed");
     if (!list) return;
 
-    // 1) 로딩 표시(네트워크 지연 동안 빈 화면 방지). 옛 샘플을 먼저 그리지 않음
-    //    → fetch 실패 시에만 샘플로 폴백하여 '예전 정보'가 잘못 노출되는 걸 막음
-    list.innerHTML = `<li class="feed__item"><span class="feed__text" style="color:#9ca3af;">공지사항을 불러오는 중…</span></li>`;
-    NOTICE_CACHE = (C.HOME_DATA.notices || []).slice();   // 편집기 초기값/폴백용으로만 보관
+    // 1) 마지막 성공 목록이 있으면 즉시 표시 (없으면 로딩 문구 — 옛 샘플로 위장 안 함)
+    const cachedLs = readNoticeLs();
+    if (cachedLs && cachedLs.length) {
+      NOTICE_CACHE = cachedLs;
+      paintNotices(cachedLs);
+      updateBellBadge();
+    } else {
+      list.innerHTML = `<li class="feed__item"><span class="feed__text" style="color:#9ca3af;">공지사항을 불러오는 중…</span></li>`;
+      NOTICE_CACHE = (C.HOME_DATA.notices || []).slice();   // 편집기 초기값/폴백용으로만 보관
+    }
 
-    // 2) NOTICE_URL 의 실데이터로 교체. 실패(null)면 그때만 config 샘플로 폴백
+    // 2) 백그라운드로 NOTICE_URL 재조회 → 성공 시 최신값으로 교체.
+    //    실패(null)면: 캐시를 보여준 상태면 유지, 아니면 config 샘플로 폴백
     fetchNotices().then((arr) => {
       if (arr) { NOTICE_CACHE = arr; paintNotices(arr); }
-      else { paintNotices(NOTICE_CACHE); }
+      else if (!cachedLs || !cachedLs.length) { paintNotices(NOTICE_CACHE); }
+      updateBellBadge();   // 미확인 공지 수 → 벨 배지 갱신
     });
 
     // 3) '편집' 버튼 → 비밀번호 → 편집기 (중복 바인딩 방지)
@@ -613,6 +662,12 @@
     notices.slice(0, 3).forEach((n) => {
       const item = el(`<li class="feed__item" style="cursor:pointer;"><span class="feed__dot"></span><span class="feed__text"></span></li>`);
       item.querySelector(".feed__text").textContent = n.title;
+      // 미확인 공지는 점을 빨갛게 + 제목을 진하게 표시
+      if (!isNoticeRead(n)) {
+        item.querySelector(".feed__dot").style.background = "#ef4444";
+        item.querySelector(".feed__text").style.fontWeight = "700";
+        item.querySelector(".feed__text").style.color = "var(--c-text)";
+      }
       item.addEventListener("click", () => openNoticeView(n));
       list.appendChild(item);
     });
@@ -640,6 +695,313 @@
     modal.querySelector(".nv-close").addEventListener("click", close);
     modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
     root.appendChild(modal); refreshIcons();
+
+    markNoticeRead(n);   // 열어봤으니 '확인함' 처리 → 배지/하이라이트 갱신
+  }
+
+  /* ---------------- 미확인 공지 배지(인앱 알림 표시) ----------------
+   *  - 공지는 고유 ID 가 없어 '날짜|제목' 을 서명(signature)으로 사용.
+   *  - 사용자가 '연' 공지의 서명을 localStorage 에 저장 → 없는 공지 = 미확인.
+   *  - 서버/네트워크 불필요(완전 클라이언트). 기기별로 따로 관리됨.
+   * ------------------------------------------------------------------- */
+  const NOTICE_SEEN_KEY = "twin_notice_seen";
+
+  function noticeSig(n) {
+    return String((n && n.date) || "") + "|" + String((n && n.title) || "");
+  }
+  function getSeenSet() {
+    try { return new Set(JSON.parse(localStorage.getItem(NOTICE_SEEN_KEY) || "[]")); }
+    catch (e) { return new Set(); }
+  }
+  function saveSeenSet(set) {
+    try { localStorage.setItem(NOTICE_SEEN_KEY, JSON.stringify(Array.from(set))); } catch (e) {}
+  }
+  function isNoticeRead(n) { return getSeenSet().has(noticeSig(n)); }
+
+  function markNoticeRead(n) {
+    const set = getSeenSet();
+    set.add(noticeSig(n));
+    saveSeenSet(set);
+    paintNotices(NOTICE_CACHE);   // 피드의 빨간 점/굵기 갱신
+    updateBellBadge();
+  }
+  function markAllNoticesRead() {
+    const set = getSeenSet();
+    (NOTICE_CACHE || []).forEach((n) => set.add(noticeSig(n)));
+    saveSeenSet(set);
+    paintNotices(NOTICE_CACHE);
+    updateBellBadge();
+  }
+  function unreadNotices() {
+    const set = getSeenSet();
+    return (NOTICE_CACHE || []).filter((n) => !set.has(noticeSig(n)));
+  }
+
+  // 헤더 벨 버튼에 빨간 배지(미확인 개수) 표시 / 0 이면 숨김
+  function updateBellBadge() {
+    const bell = $id("btnBell");
+    if (!bell) return;
+    const count = unreadNotices().length;
+    let badge = bell.querySelector(".bell-badge");
+    if (count <= 0) { if (badge) badge.remove(); return; }
+    if (!badge) {
+      badge = el(`<span class="bell-badge"></span>`);
+      bell.appendChild(badge);
+    }
+    badge.textContent = count > 9 ? "9+" : String(count);
+  }
+
+  // 벨 클릭 → 알림 패널(휴대폰 알림 토글 + 공지 목록 + 모두 읽음)
+  function openNoticePanel() {
+    const root = $id("overlayRoot");
+    const modal = el(
+      `<div class="overlay" style="position:fixed;inset:0;z-index:60;display:flex;align-items:flex-start;justify-content:center;background:rgba(17,24,39,0.4);backdrop-filter:blur(2px);padding:64px 18px 18px;animation:fadeIn .2s ease;">
+         <div style="background:#fff;border-radius:22px;padding:18px 16px;max-width:420px;width:100%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.2);animation:popIn .25s ease;">
+           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+             <h3 style="font-size:16.5px;font-weight:800;letter-spacing:-0.02em;display:flex;align-items:center;gap:7px;"><i data-lucide="bell" style="width:17px;height:17px;"></i> 알림</h3>
+             <button class="np-close" type="button" aria-label="닫기" style="width:30px;height:30px;border-radius:9px;background:#f3f4f6;color:#6b7280;display:grid;place-items:center;border:none;cursor:pointer;"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
+           </div>
+           <div class="np-push" style="margin-bottom:12px;"></div>
+           <div class="np-list" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;"></div>
+           <button class="np-readall" type="button" style="margin-top:12px;padding:11px;border-radius:14px;background:#f3f4f6;color:#374151;font-size:13.5px;font-weight:700;">모두 읽음으로 표시</button>
+         </div>
+       </div>`
+    );
+    const close = () => (root.innerHTML = "");
+    modal.querySelector(".np-close").addEventListener("click", close);
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+
+    // 공지 목록 렌더(미확인 = 빨간 점 + 굵게). 클릭 → 상세 보기(자동 읽음 처리)
+    const listBox = modal.querySelector(".np-list");
+    const renderRows = () => {
+      listBox.innerHTML = "";
+      const arr = NOTICE_CACHE || [];
+      if (!arr.length) {
+        listBox.appendChild(el(`<div style="padding:24px 0;text-align:center;color:#9ca3af;font-size:13px;">등록된 공지가 없습니다.</div>`));
+        return;
+      }
+      arr.slice(0, 20).forEach((n) => {
+        const unread = !isNoticeRead(n);
+        const row = el(
+          `<button type="button" style="display:flex;align-items:flex-start;gap:9px;text-align:left;width:100%;padding:11px 12px;border-radius:13px;border:1px solid ${unread ? "#fee2e2" : "#eef0f4"};background:${unread ? "#fff7f7" : "#fafbfc"};cursor:pointer;">
+             <span style="flex:none;width:7px;height:7px;border-radius:50%;margin-top:5px;background:${unread ? "#ef4444" : "#d1d5db"};"></span>
+             <span style="flex:1;min-width:0;">
+               <span class="np-row-title" style="display:block;font-size:13.5px;font-weight:${unread ? "700" : "500"};color:${unread ? "#111827" : "#6b7280"};line-height:1.4;word-break:break-word;"></span>
+               <span class="np-row-date" style="display:block;font-size:11.5px;color:#9ca3af;font-weight:600;margin-top:2px;"></span>
+             </span>
+           </button>`
+        );
+        row.querySelector(".np-row-title").textContent = n.title || "(제목 없음)";
+        row.querySelector(".np-row-date").textContent = n.date || "";
+        row.addEventListener("click", () => { close(); openNoticeView(n); });
+        listBox.appendChild(row);
+      });
+    };
+    renderRows();
+
+    modal.querySelector(".np-readall").addEventListener("click", () => {
+      markAllNoticesRead();
+      renderRows();
+      toast("모든 공지를 읽음으로 표시했어요");
+    });
+
+    // 휴대폰 푸시 토글 영역(설정/지원 상태에 따라 다르게 표시)
+    buildPushRow(modal.querySelector(".np-push"));
+
+    root.appendChild(modal); refreshIcons();
+  }
+
+  /* ---------------- 휴대폰 푸시 알림 (Firebase Cloud Messaging) ----------------
+   *  - config.js 의 FIREBASE_CONFIG + FCM_VAPID_KEY 가 설정돼야 동작
+   *    (미설정 시 알림 토글 자체를 숨기고 인앱 배지만 동작).
+   *  - 구독: 알림 권한 → FCM 토큰 발급 → GAS(NOTICE_URL)에 토큰 등록(시트 저장).
+   *  - 발송: 새 공지 저장 시 서버([트윈공지/Code.gs])가 FCM HTTP v1 API 로 처리.
+   *  - iOS 는 홈 화면 설치 PWA + iOS 16.4+ 에서만 가능 → 안내 표시.
+   * ------------------------------------------------------------------- */
+  const FB = C.FIREBASE || {};
+  const FCM_SDK_VER  = "10.12.2";                 // Firebase compat SDK 버전 (firebase-messaging-sw.js 와 맞출 것)
+  const FCM_ON_KEY   = "twin_fcm_on";             // 사용자가 알림을 켰는지 (localStorage)
+  const FCM_TOK_KEY  = "twin_fcm_token";          // 서버에 등록해 둔 마지막 토큰
+  let FCM_MESSAGING  = null;                      // firebase.messaging() 인스턴스 (초기화 성공 시)
+  let FCM_SW_REG     = null;                      // FCM 전용 서비스워커 등록 객체
+
+  function pushConfigured() {
+    const bad = (v) => !v || String(v).indexOf("PLACEHOLDER") !== -1;
+    const cfg = FB.config || {};
+    return !bad(cfg.apiKey) && !bad(cfg.projectId) && !bad(cfg.messagingSenderId) && !bad(FB.vapidKey);
+  }
+  function pushBrowserSupported() {
+    return ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
+  }
+  function isIos() {
+    return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+           (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+  function isStandalone() {
+    return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+           navigator.standalone === true;
+  }
+  function pushIosNeedsInstall() { return isIos() && !isStandalone(); }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src; s.defer = true;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error("스크립트 로드 실패: " + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  // Firebase SDK 동적 로드 + 초기화 (설정 & 브라우저 지원 시에만)
+  async function initPush() {
+    if (!pushConfigured() || !pushBrowserSupported()) return;
+    try {
+      await loadScript(`https://www.gstatic.com/firebasejs/${FCM_SDK_VER}/firebase-app-compat.js`);
+      await loadScript(`https://www.gstatic.com/firebasejs/${FCM_SDK_VER}/firebase-messaging-compat.js`);
+      firebase.initializeApp(FB.config);
+      FCM_MESSAGING = firebase.messaging();
+
+      // 우리 sw.js(오프라인 캐시, 루트 스코프)와 충돌하지 않도록
+      // FCM 전용 워커는 별도 스코프로 등록 (FCM 기본 방식과 동일한 스코프명)
+      FCM_SW_REG = await navigator.serviceWorker.register("firebase-messaging-sw.js", {
+        scope: "./firebase-cloud-messaging-push-scope",
+      });
+
+      // 앱이 열려 있을 때(포그라운드) 푸시 수신 → 토스트 + 공지 목록 새로고침
+      FCM_MESSAGING.onMessage((payload) => {
+        const n = (payload && payload.notification) || {};
+        toast(n.title ? `${n.title}${n.body ? " — " + n.body : ""}` : "새 공지가 도착했어요");
+        renderNoticeFeed();
+      });
+
+      // 이미 알림을 켠 사용자는 토큰이 갱신됐을 수 있으니 조용히 재확인
+      refreshFcmToken();
+    } catch (e) {
+      console.warn("[푸시] FCM 초기화 실패:", e);
+    }
+  }
+
+  async function pushIsOn() {
+    return pushConfigured() &&
+           Notification.permission === "granted" &&
+           localStorage.getItem(FCM_ON_KEY) === "1";
+  }
+
+  async function pushEnable() {
+    if (!FCM_MESSAGING) throw new Error("FCM 초기화 전");
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") return false;
+    const token = await FCM_MESSAGING.getToken({
+      vapidKey: FB.vapidKey,
+      serviceWorkerRegistration: FCM_SW_REG,
+    });
+    if (!token) return false;
+    await sendTokenToServer(token, "subscribe");
+    try {
+      localStorage.setItem(FCM_ON_KEY, "1");
+      localStorage.setItem(FCM_TOK_KEY, token);
+    } catch (e) {}
+    return true;
+  }
+
+  async function pushDisable() {
+    const token = localStorage.getItem(FCM_TOK_KEY) || "";
+    try { if (FCM_MESSAGING) await FCM_MESSAGING.deleteToken(); } catch (e) {}
+    if (token) await sendTokenToServer(token, "unsubscribe");
+    try {
+      localStorage.setItem(FCM_ON_KEY, "0");
+      localStorage.removeItem(FCM_TOK_KEY);
+    } catch (e) {}
+  }
+
+  // 앱 시작 시: 구독 중인데 토큰이 바뀌었으면 서버 등록을 최신 토큰으로 교체
+  async function refreshFcmToken() {
+    try {
+      if (!(await pushIsOn())) return;
+      const token = await FCM_MESSAGING.getToken({
+        vapidKey: FB.vapidKey,
+        serviceWorkerRegistration: FCM_SW_REG,
+      });
+      const old = localStorage.getItem(FCM_TOK_KEY) || "";
+      if (token && token !== old) {
+        if (old) sendTokenToServer(old, "unsubscribe");
+        await sendTokenToServer(token, "subscribe");
+        try { localStorage.setItem(FCM_TOK_KEY, token); } catch (e) {}
+      }
+    } catch (e) {
+      console.warn("[푸시] 토큰 갱신 실패:", e);
+    }
+  }
+
+  // 토큰 등록/해제를 GAS(트윈공지)로 전송
+  //  - GAS 리다이렉트 CORS 때문에 no-cors POST (공지 저장과 동일한 방식)
+  async function sendTokenToServer(token, action) {
+    const url = C.NOTICE_URL || "";
+    if (!url || url.indexOf("PLACEHOLDER") !== -1) return;
+    await fetch(url, {
+      method: "POST",
+      mode: "no-cors",
+      redirect: "follow",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action, token }),
+    });
+  }
+
+  // 알림 패널 안의 '휴대폰 알림 받기' 영역 구성
+  function buildPushRow(box) {
+    if (!box) return;
+    // 1) 푸시 미설정(APP_ID 없음) → 영역 자체를 비움(기능 숨김)
+    if (!pushConfigured()) { box.innerHTML = ""; return; }
+    // 2) 브라우저 미지원
+    if (!pushBrowserSupported()) {
+      box.innerHTML = `<div style="padding:12px 14px;border-radius:13px;background:#f9fafb;color:#9ca3af;font-size:12.5px;">이 브라우저는 알림을 지원하지 않습니다.</div>`;
+      return;
+    }
+    // 3) iOS 미설치 → 홈 화면 추가 안내
+    if (pushIosNeedsInstall()) {
+      box.innerHTML = `<div style="padding:12px 14px;border-radius:13px;background:#eff6ff;color:#1d4ed8;font-size:12.5px;line-height:1.6;"><b>아이폰 알림 안내</b><br>공유 버튼 → '홈 화면에 추가'로 앱을 설치하면 휴대폰 알림을 받을 수 있어요.</div>`;
+      return;
+    }
+    // 4) 정상 → 토글 버튼
+    box.innerHTML =
+      `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:13px;background:#f5f3ff;border:1px solid #ede9fe;">
+         <span style="display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;color:#4338ca;"><i data-lucide="bell-ring" style="width:16px;height:16px;"></i> 휴대폰 알림 받기</span>
+         <button class="np-toggle" type="button" aria-pressed="false" style="flex:none;width:46px;height:26px;border-radius:999px;background:#d1d5db;position:relative;transition:background .2s;cursor:pointer;border:none;">
+           <span style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.25);"></span>
+         </button>
+       </div>
+       <p class="np-toggle-hint" style="font-size:11.5px;color:#9ca3af;margin:7px 2px 0;">새 공지가 올라오면 휴대폰으로 알려드려요.</p>`;
+    const toggle = box.querySelector(".np-toggle");
+    const knob = toggle.querySelector("span");
+    const paint = (on) => {
+      toggle.setAttribute("aria-pressed", on ? "true" : "false");
+      toggle.style.background = on ? "#4f46e5" : "#d1d5db";
+      knob.style.left = on ? "23px" : "3px";
+    };
+    // 현재 구독 상태 반영
+    pushIsOn().then(paint);
+
+    let busy = false;
+    toggle.addEventListener("click", async () => {
+      if (busy) return;
+      busy = true;
+      const turningOn = toggle.getAttribute("aria-pressed") !== "true";
+      try {
+        if (turningOn) {
+          const ok = await pushEnable();
+          if (ok) { paint(true); toast("휴대폰 알림이 켜졌어요"); }
+          else { paint(false); toast("알림 권한이 거부되어 있어요. 브라우저 설정에서 허용해 주세요"); }
+        } else {
+          await pushDisable();
+          paint(false);
+          toast("휴대폰 알림을 껐어요");
+        }
+      } catch (e) {
+        console.warn("[푸시] 토글 실패:", e);
+        toast("알림 설정에 실패했어요. 잠시 후 다시 시도해 주세요");
+      } finally { busy = false; }
+    });
   }
 
   // GAS 에서 공지 목록 GET (미설정/실패 시 null → 기존 표시 유지)
@@ -653,7 +1015,11 @@
       const sep = url.indexOf("?") === -1 ? "?" : "&";
       const res = await fetch(url + sep + "action=list&t=" + Date.now(), { cache: "no-store" });
       const json = await res.json();
-      if (json.result === "ok" && Array.isArray(json.notices)) return json.notices;
+      if (json.result === "ok" && Array.isArray(json.notices)) {
+        // 성공 목록을 로컬에 보관 → 다음 방문 때 즉시 표시 (편집 저장 재조회 포함)
+        try { localStorage.setItem(NOTICE_LS_KEY, JSON.stringify(json.notices.slice(0, 30))); } catch (e) {}
+        return json.notices;
+      }
     } catch (err) {
       console.warn("[공지] 목록 불러오기 실패:", err);
     }
@@ -1075,8 +1441,7 @@
     if (s.url) {
       // 실제 연동 주소가 있으면 iframe 임베드
       v.appendChild(el(
-        `<iframe src="${s.url}" title="${s.label}"
-          style="width:100%;height:calc(100vh - var(--header-h) - 48px);border:0;"></iframe>`
+        `<iframe class="sub-iframe" src="${s.url}" title="${s.label}"></iframe>`
       ));
     } else {
       // 아직 주소 미등록 → 메뉴명 크게 뜨는 임시 플레이스홀더
@@ -1469,7 +1834,8 @@
     const grid = $id("btnGrid");
     if (grid) grid.addEventListener("click", openAllMenu);
     const bell = $id("btnBell");
-    if (bell) bell.addEventListener("click", () => toast("새로운 알림이 없어요"));
+    if (bell) bell.addEventListener("click", openNoticePanel);
+    updateBellBadge();
 
     // 브랜드(사이드바 'Twin Work' / 모바일 헤더 로고·이름) 클릭 → 홈(대시보드)
     document.querySelectorAll(".sidebar__brand, .app-header__left").forEach((brand) => {
@@ -1486,7 +1852,8 @@
         if (nav === "home") goHome();
         else if (nav === "menu") openAllMenu();
         else if (nav === "chatbot") { openService(findService("MENU-01")); setBottomActive("chatbot"); }
-        else if (nav === "manual") { openService(findService("MENU-03")); setBottomActive("manual"); }
+        // 매뉴얼은 '새 창(external)'으로 열림 → 화면은 그대로이므로 탭 하이라이트를 옮기지 않음
+        else if (nav === "manual") { openService(findService("MENU-03")); }
       });
     });
   }

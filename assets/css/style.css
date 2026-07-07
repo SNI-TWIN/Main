@@ -111,11 +111,22 @@ ul, li { list-style:none; }
 .app-header__name { font-size:17px; font-weight:800; letter-spacing:-0.03em; }
 .app-header__right { display:flex; align-items:center; gap:2px; }
 .icon-btn {
+  position:relative;
   width:38px; height:38px; display:grid; place-items:center;
   border-radius:var(--r-md); color:var(--c-text-sub);
   transition:background var(--t-fast), color var(--t-fast);
 }
 .icon-btn:hover { background:var(--c-soft); color:var(--c-text); }
+
+/* 미확인 공지 배지 (벨 버튼 우상단 빨간 점/개수) */
+.bell-badge {
+  position:absolute; top:2px; right:2px;
+  min-width:16px; height:16px; padding:0 4px; box-sizing:border-box;
+  display:flex; align-items:center; justify-content:center;
+  background:#ef4444; color:#fff; font-size:10px; font-weight:800; line-height:1;
+  border-radius:999px; border:2px solid #fff;
+  pointer-events:none;
+}
 
 /* ====================== [5] 인사말 (상단) ================= */
 .greet { padding:var(--sp-6) var(--sp-4) var(--sp-4); }
@@ -794,6 +805,44 @@ ul, li { list-style:none; }
 @keyframes slideIn{ from{transform:translateX(100%);} to{transform:translateX(0);} }
 @keyframes alertPulse{ 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.45;transform:scale(0.9);} }
 .sub-header .icon-btn, .slide-panel .icon-btn { width:34px; height:34px; }
+
+/* ====================== [18-A] 모바일(터치·iOS/Android) 보정 ==========
+   실기기에서 겪는 자잘한 불편을 잡는 섹션 */
+
+/* 탭할 때 번쩍이는 회색 하이라이트 제거(iOS/Android) + 더블탭 줌 지연 제거 */
+html { -webkit-tap-highlight-color:transparent; }
+button, a, select, label { touch-action:manipulation; }
+
+/* 터치 기기: hover 부양 효과가 탭 후 '눌린 채 고정'되는 현상 방지
+   (마우스 있는 기기에서만 hover 연출 유지) */
+@media (hover:none) {
+  .shortcut:hover {
+    transform:none; border-color:var(--glass-border);
+    box-shadow:0 10px 24px rgba(17,24,39,0.04);
+  }
+}
+
+/* iOS Safari: 16px 미만 입력창에 포커스하면 화면이 강제로 줌됨
+   → 동적 생성 모달(공지 편집/비밀번호 등)의 입력창을 모바일에서 16px 로 보정 */
+@media (max-width:899px) {
+  .overlay input[type="text"],
+  .overlay input[type="password"],
+  .overlay textarea { font-size:16px !important; }
+}
+
+/* 서브화면 iframe (AppSheet 등 임베드) */
+.sub-iframe { width:100%; height:calc(100vh - var(--header-h) - 48px); border:0; }
+
+/* iOS 주소창/툴바 때문에 100vh 가 실제 화면보다 커지는 문제
+   → 동적 뷰포트(dvh) 지원 브라우저에서는 dvh 로 보정 */
+@supports (height:100dvh) {
+  .sub-iframe { height:calc(100dvh - var(--header-h) - 48px); }
+  .placeholder { min-height:calc(100dvh - var(--header-h) - 48px); }
+  .bridge { min-height:calc(100dvh - var(--header-h) - 48px - var(--bottomnav-h)); }
+}
+@supports (height:100dvh) {
+  @media (min-width:900px) { .bridge { min-height:calc(100dvh - 48px); } }
+}
 
 /* ====================== [18] 접근성·성능: 모션 최소화 =================
    사용자가 OS에서 '동작 줄이기'를 켰거나 저사양 기기에서 무한 반복 애니메이션

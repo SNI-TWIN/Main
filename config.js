@@ -19,10 +19,12 @@ const APP_META = {
 
 /* ---------------------------------------------------------------------
  * 2) 에셋 맵 (커스텀 이미지/로고 경로)
- *    - 파일이 없어도 Lucide 아이콘이 대신 뜨므로 깨지지 않습니다.
+ *    - 로고 파일을 넣은 뒤 경로를 적으면 표시됩니다. 예: "assets/images/logo.png"
+ *    - ★ 파일이 없는데 경로만 적으면 접속할 때마다 404 요청이 생겨 느려지므로,
+ *      파일을 실제로 올리기 전까지는 "" 로 비워 두세요.
  * ------------------------------------------------------------------- */
 const APP_ASSETS = {
-  logo: "assets/images/logo.png",
+  logo: "",   // 예: "assets/images/logo.png"
 };
 
 /* ---------------------------------------------------------------------
@@ -66,6 +68,33 @@ const TWIN_VOICE_URL = "https://script.google.com/macros/s/AKfycbyrAXGDxNWRvySLg
 const NOTICE_URL = "https://script.google.com/macros/s/AKfycbxbumWCNzeNHJFH8rTu2orQBmPRdYpvoQ7Z6wf47kuYsV7NBY3IbnJChvndzUd2q-fjxw/exec";
 
 /* ---------------------------------------------------------------------
+ * 2-4) 휴대폰 푸시 알림 — Firebase Cloud Messaging(FCM) 연동
+ *   - 새 공지가 올라오면 구독한 사용자 휴대폰으로 푸시 알림을 보냅니다.
+ *   - ★ 설정 방법 (모두 무료)
+ *     1. https://console.firebase.google.com → 프로젝트 만들기
+ *     2. [프로젝트 설정(톱니)] > 일반 > 내 앱 > 웹 앱(</>) 추가
+ *        → 나오는 firebaseConfig 값들을 아래 FIREBASE_CONFIG 에 그대로 복사
+ *     3. [프로젝트 설정] > 클라우드 메시징 > 웹 구성 > "웹 푸시 인증서"
+ *        → [키 쌍 생성] → 공개 키를 아래 FCM_VAPID_KEY 에 붙여넣기
+ *     4. 발송(서버) 설정: [프로젝트 설정] > 서비스 계정 > "새 비공개 키 생성"
+ *        → 다운로드된 JSON 파일 '내용 전체'를 [트윈공지/Code.gs] 쪽
+ *        Script Properties 의 FCM_SERVICE_ACCOUNT 에 붙여넣기 (코드 비노출)
+ *   - PLACEHOLDER 상태면 푸시 기능은 자동으로 꺼지고(알림 토글 숨김),
+ *     인앱 '미확인 공지 배지'만 동작합니다.
+ *   - ⚠️ iOS(아이폰)는 홈 화면에 '추가'해 설치한 PWA + iOS 16.4 이상에서만
+ *     웹 푸시가 동작합니다(사파리 탭만으로는 불가).
+ * ------------------------------------------------------------------- */
+const FIREBASE_CONFIG = {
+  apiKey:            "FIREBASE_API_KEY_PLACEHOLDER",     // ★ Firebase 웹 앱 apiKey
+  authDomain:        "FIREBASE_AUTH_DOMAIN_PLACEHOLDER", // 예: twin-work.firebaseapp.com
+  projectId:         "FIREBASE_PROJECT_ID_PLACEHOLDER",  // 예: twin-work
+  storageBucket:     "FIREBASE_BUCKET_PLACEHOLDER",      // 예: twin-work.appspot.com
+  messagingSenderId: "FIREBASE_SENDER_ID_PLACEHOLDER",   // 숫자
+  appId:             "FIREBASE_APP_ID_PLACEHOLDER",      // 1:xxxx:web:xxxx
+};
+const FCM_VAPID_KEY = "FCM_VAPID_KEY_PLACEHOLDER";       // ★ 웹 푸시 인증서 공개 키
+
+/* ---------------------------------------------------------------------
  * 3) 트윈 Chat-Bot '브릿지 스크린' 설정
  * ------------------------------------------------------------------- */
 const BRIDGE_CONFIG = {
@@ -92,32 +121,34 @@ const BRIDGE_CONFIG = {
  * 4) 7대 서비스 라인업
  *    lucide : Lucide 아이콘 이름 (https://lucide.dev/icons 에서 검색)
  *    icon   : 커스텀 PNG 경로 (넣으면 Lucide 대신 이 이미지가 표시됨)
+ *             ★ PNG 파일을 실제로 올린 뒤에만 경로를 적으세요.
+ *               (파일 없이 경로만 있으면 매 접속마다 404 요청 → 로딩 낭비)
  *    type   : 'home' | 'bridge' | 'iframe' | 'modal'
  *    status : 'active' | 'preparing'
  * ------------------------------------------------------------------- */
 const SERVICES = [
   {
     id: "DASH-00", label: "대시보드", group: "HOME",
-    lucide: "layout-dashboard", icon: "assets/icons/dashboard.png",
+    lucide: "layout-dashboard", icon: "",
     type: "home", url: "", status: "active",
   },
   {
     // 트윈챗봇 — NotebookLM 브릿지
     id: "MENU-01", label: "트윈 Chat-Bot", group: "AI",
-    lucide: "bot", icon: "assets/icons/chatbot.png",
+    lucide: "bot", icon: "",
     type: "bridge", url: BRIDGE_CONFIG.ctaUrl, status: "active",
   },
   {
     // 트윈투두 — AppSheet 임베드 (★ 아래 url 에 AppSheet 주소 입력)
     id: "MENU-02", label: "트윈 To-Do", group: "WORK",
-    lucide: "square-check-big", icon: "assets/icons/todo.png",
+    lucide: "square-check-big", icon: "",
     type: "iframe", url: "", status: "active",
   },
   {
     // 운영매뉴얼 — Google Sites 새 창 열기
     //  (구글 사이트는 X-Frame-Options 로 iframe 임베드가 막혀 있어 새 창 방식으로 연결)
     id: "MENU-03", label: "운영매뉴얼", group: "WORK",
-    lucide: "book-open", icon: "assets/icons/manual.png",
+    lucide: "book-open", icon: "",
     type: "external", url: "https://sites.google.com/view/twintowersmanual/%ED%99%88", status: "active",
   },
   {
@@ -126,33 +157,34 @@ const SERVICES = [
     //  있어(특히 iOS) → 안내 팝업(type: applink)으로 '설치 앱에서 열기'를 유도한다.
     //  appName : 안내 문구에 표시할 설치 앱 이름
     id: "MENU-04", label: "재난대응매뉴얼", group: "SAFETY",
-    lucide: "siren", icon: "assets/icons/disaster.png",
+    lucide: "siren", icon: "",
     type: "applink", url: "https://atssa-kim.github.io/twin-alarm/",
     appName: "Twin-alarm", status: "active",
   },
   {
     // 트윈Safety — AppSheet 임베드 (법적 서명/위험성평가, ★ url 입력)
     id: "MENU-05", label: "트윈Safety", group: "SAFETY",
-    lucide: "shield-check", icon: "assets/icons/safety.png",
+    lucide: "shield-check", icon: "",
     type: "iframe", url: "", status: "active",
   },
   {
     // 인사관리포탈 — 외부 HR 포탈 새 창(_blank)
     id: "MENU-06", label: "인사관리포탈", group: "HR",
-    lucide: "users", icon: "assets/icons/hr.png",
+    lucide: "users", icon: "",
     type: "external", url: "https://sni-twin.github.io/hire-eval/", status: "active",
   },
   {
     // 트윈소리함 — 1:1 비밀 VOC 제안 폼 (글 목록 노출 안 함)
     id: "MENU-07", label: "트윈소리함", group: "COMMUNITY",
-    lucide: "inbox", icon: "assets/icons/voc.png",
+    lucide: "inbox", icon: "",
     type: "voc", url: "", status: "active",
   },
   {
-    // 외주작업관리 — 무인화 관리자창 (개발 중 → 안내 모달)
+    // 외주작업관리 — 무인화 관리자창 (클릭 시 구축 중 안내 모달)
+    //  status 는 'active' 로 두어 아이콘이 다른 메뉴와 똑같이(흐림/점 표시 없이) 보이게 함
     id: "MENU-08", label: "외주작업관리", group: "WORK",
-    lucide: "briefcase", icon: "assets/icons/outsourcing.png",
-    type: "modal", url: "", status: "preparing",
+    lucide: "briefcase", icon: "",
+    type: "modal", url: "", status: "active",
     modalText: "외주작업 무인화 관리 시스템을 구축하는 중입니다.",
   },
 ];
@@ -214,10 +246,13 @@ const HOME_DATA = {
 
 /* ---------------------------------------------------------------------
  * 6) 전역 노출 (수정 금지)
+ *   - window 가 없는 환경(firebase-messaging-sw.js 워커)에서도 이 파일을
+ *     importScripts 로 읽어 쓰므로 self 로 폴백합니다.
  * ------------------------------------------------------------------- */
-window.CONFIG = {
+(typeof window !== "undefined" ? window : self).CONFIG = {
   APP_META, APP_ASSETS, BRIDGE_CONFIG, SERVICES, HOME_DATA,
   TWIN_VOICE_URL, NOTICE_URL,
+  FIREBASE: { config: FIREBASE_CONFIG, vapidKey: FCM_VAPID_KEY },
   KMA: {
     NX: KMA_NX, NY: KMA_NY, AREA_CODE: KMA_AREA_CODE, AREA_NO: KMA_AREA_NO,
     STN_ID: KMA_STN_ID, PROXY_URL: WEATHER_PROXY_URL,
