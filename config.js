@@ -168,8 +168,8 @@ const SERVICES = [
     type: "iframe", url: "", status: "active",
   },
   {
-    // 인사관리포탈 — 외부 HR 포탈 새 창(_blank)
-    id: "MENU-06", label: "인사관리포탈", group: "HR",
+    // PJT채용관리 — 외부 HR 포탈 새 창(_blank)
+    id: "MENU-06", label: "PJT채용관리", group: "HR",
     lucide: "users", icon: "",
     type: "external", url: "https://sni-twin.github.io/hire-eval/", status: "active",
   },

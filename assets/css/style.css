@@ -130,32 +130,10 @@ ul, li { list-style:none; }
 
 /* ====================== [5] 인사말 (상단) ================= */
 .greet { padding:var(--sp-6) var(--sp-4) var(--sp-4); }
-.greet__live {
-  display:inline-flex; align-items:center; gap:6px; margin-bottom:var(--sp-2);
-  font-size:11px; font-weight:700; letter-spacing:0.02em; color:#16a34a;
-  background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.2);
-  padding:3px 10px 3px 8px; border-radius:var(--r-full);
-}
 .greet__line {
   font-size:19px; font-weight:800; letter-spacing:-0.035em; line-height:1.4;
   color:var(--c-text);
 }
-
-/* 실시간 작동 표시 점 (천천히 깜빡) */
-.live-dot { position:relative; width:8px; height:8px; flex-shrink:0; }
-.live-dot, .live-dot::after {
-  border-radius:50%; background:#22c55e;
-}
-.live-dot::after {
-  content:""; position:absolute; inset:0;
-  animation:livePulse 2.4s ease-out infinite;
-}
-@keyframes livePulse {
-  0%   { transform:scale(1);   opacity:0.7; }
-  100% { transform:scale(2.8); opacity:0; }
-}
-/* 헤더 안의 라이브 점 정렬 */
-.app-header__left .live-dot { margin-left:2px; }
 
 /* ====================== [6] 2단 분할 위젯 ================= */
 .alert-wrap { margin:0 var(--sp-4) var(--sp-3); }
@@ -569,7 +547,6 @@ ul, li { list-style:none; }
 @media (max-width:768px) {
   /* 여백 전반 최소화 */
   .greet { padding:var(--sp-3) var(--sp-4) 6px; }
-  .greet__live { margin-bottom:4px; padding:2px 8px 2px 6px; font-size:10px; }
   .greet__line { font-size:15.5px; }
   .alert-wrap { margin:0 var(--sp-4) 8px; }
   .alert-banner { padding:8px 11px; font-size:11px; gap:7px; }
@@ -846,7 +823,7 @@ button, a, select, label { touch-action:manipulation; }
 
 /* ====================== [18] 접근성·성능: 모션 최소화 =================
    사용자가 OS에서 '동작 줄이기'를 켰거나 저사양 기기에서 무한 반복 애니메이션
-   (livePulse·alertPulse·skelShine·orbRipple·dotBounce 등)이 발열/배터리/버벅임을
+   (alertPulse·skelShine·orbRipple·dotBounce 등)이 발열/배터리/버벅임을
    유발할 때, 반복 애니메이션을 1회로 멈춰 부담을 줄인다. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

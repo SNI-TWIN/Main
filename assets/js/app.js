@@ -1368,7 +1368,7 @@
     }
   }
 
-  // 외부 포탈 새 창 라우팅 (인사관리포탈 등)
+  // 외부 포탈 새 창 라우팅 (PJT채용관리 등)
   function openExternal(s) {
     if (!s.url) { toast(`${s.label} 주소가 아직 등록되지 않았어요`); return; }
     openNewTab(s.url);
