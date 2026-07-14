@@ -180,12 +180,15 @@ const SERVICES = [
     type: "voc", url: "", status: "active",
   },
   {
-    // 외주작업관리 — 무인화 관리자창 (클릭 시 구축 중 안내 모달)
-    //  status 는 'active' 로 두어 아이콘이 다른 메뉴와 똑같이(흐림/점 표시 없이) 보이게 함
+    // 외주작업관리 — 무인화 관리자창 (구글 앱스크립트 웹앱을 앱 안에 iframe 임베드)
+    //  ★ 앱 안에서 자연스럽게 열리려면(연결 거부 방지) 해당 GAS 의 doGet 이
+    //    HtmlService...setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    //    로 반환되어야 합니다. (없으면 iframe 임베드가 차단됨)
     id: "MENU-08", label: "외주작업관리", group: "WORK",
     lucide: "briefcase", icon: "",
-    type: "modal", url: "", status: "active",
-    modalText: "외주작업 무인화 관리 시스템을 구축하는 중입니다.",
+    type: "iframe",
+    url: "https://script.google.com/macros/s/AKfycbylKP37bS71B9mxYGYvJ0BDJ_BJF-lQ3wN312gcfDUugQyD9Jjkoxr_pVwc3deiClQE6A/exec?page=admin",
+    status: "active",
   },
 ];
 
