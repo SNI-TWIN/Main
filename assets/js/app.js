@@ -142,20 +142,27 @@
       console.info("%c[KMA] 날씨 프록시(WEATHER_PROXY_URL) 미설정 → 샘플 데이터 + '샘플' 배지 표시 중.", "color:#6b7280");
     } else {
       try {
-        // ⚡ 4개 호출을 병렬로 동시 실행 (순차 ~7.5s → 가장 느린 1개 ~2s)
-        //  - now/vil 은 필수(실패 시 전체 오류) → Promise.all 에 그대로
-        //  - ext/alert 는 보조 → safeCall 로 감싸 실패해도 전체를 막지 않음
-        const [now, vil, ext, alert] = await Promise.all([
-          fetchKmaNow(),                              // 초단기실황(기온/습도/풍속/풍향/강수량)
-          fetchKmaVilageRaw(),                        // 단기예보(시간별/주간/POP 공용)
-          safeCall(fetchKmaExtremes, null),           // 오늘 정확한 최고/최저(02시 발표분)
-          safeCall(fetchKmaAlert, { active: false }), // 기상특보 (실패 시 미발령)
+        // ⚡ 4개 KMA 요청을 GAS '배치' 1회로 묶어 서버측 병렬 처리 (기존 ~7.5s → ~2s)
+        //  GAS 는 브라우저의 동시요청을 직렬화하므로, 여러 번 따로 부르지 않고 한 번에 보냄.
+        const nB = kmaUltraBase();   // 초단기실황 base
+        const vB = kmaVilageBase();  // 단기예보 base
+        const eB = kmaDayBase();     // 오늘 최고/최저용 base(02시 발표분)
+        const [njson, vjson, ejson, ajson] = await kmaBatch([
+          { s: "VilageFcstInfoService_2.0", o: "getUltraSrtNcst", p: { pageNo: 1, numOfRows: 10,  base_date: nB.base_date, base_time: nB.base_time, nx: C.KMA.NX, ny: C.KMA.NY } },
+          { s: "VilageFcstInfoService_2.0", o: "getVilageFcst",   p: { pageNo: 1, numOfRows: 800, base_date: vB.base_date, base_time: vB.base_time, nx: C.KMA.NX, ny: C.KMA.NY } },
+          { s: "VilageFcstInfoService_2.0", o: "getVilageFcst",   p: { pageNo: 1, numOfRows: 800, base_date: eB.base_date, base_time: eB.base_time, nx: C.KMA.NX, ny: C.KMA.NY } },
+          { s: "WthrWrnInfoService",        o: "getWthrWrnMsg",   p: { pageNo: 1, numOfRows: 10,  stnId: (C.KMA && C.KMA.STN_ID) || 109 } },
         ]);
+        // now/vil 은 필수(실패 시 catch 로) — ext/alert 는 보조(실패해도 폴백)
+        const now = parseNcst(njson);                 // 초단기실황(기온/습도/풍속/풍향/강수량)
+        const vil = kmaItems_(vjson);                 // 단기예보 원본(시간별/주간/POP 공용)
+        const ext = safeParse(() => parseExtremesJson(ejson), null);   // 오늘 정확한 최고/최저
+        const alert = safeParse(() => parseAlertJson(ajson), { active: false }); // 기상특보
         Object.assign(now, parseTodayExtremes(vil));  // 강수확률 + 최고/최저 폴백
         Object.assign(now, parseCurrentSky(vil));     // 하늘상태(SKY) 보정 → 맑음/구름많음/흐림
         if (ext) { now.tmx = ext.tmx; now.tmn = ext.tmn; }
         // 체감온도: 기상청 생활기상지수 '체감온도' API 는 2026 데이터 생산중단으로 폐지됨.
-        //  → 공식 API 없음. now.feels 는 fetchKmaNow 의 feelsLike(T,H,V) 계산식이 유일한 소스.
+        //  → 공식 API 없음. now.feels 는 parseNcst 의 feelsLike(T,H,V) 계산식이 유일한 소스.
         const hourly = parseHourly(vil);
         const weekly = parseDaily(vil);
         WX_DATA = { now, hourly, weekly, alert };
@@ -183,8 +190,9 @@
     renderAlert();
     renderWxTab();
   }
-  async function safeCall(fn, fallback) {
-    try { return await fn(); } catch (e) { console.warn("[KMA] 부분 실패:", e); return fallback; }
+  // 보조 파서용: 예외 시 폴백 반환 (ext/alert 는 실패해도 전체를 막지 않음)
+  function safeParse(fn, fallback) {
+    try { return fn(); } catch (e) { console.warn("[KMA] 부분 실패:", e); return fallback; }
   }
 
   /* ── 체감온도 자동 연산 ──
@@ -227,24 +235,53 @@
   }
 
   /* ---------------- 렌더 ---------------- */
+  let ALERT_ROTATE_TIMER = null;   // 특보 순환 타이머
+  let ALERT_INDEX = 0;             // 현재 표시 중인 특보 인덱스
+  const ALERT_ROTATE_MS = 3000;    // 3초마다 다음 특보로 전환
+
   function renderAlert() {
     const box = $id("alertBanner");
     if (!box) return;
     const wrap = box.closest(".alert-wrap") || box;
     const a = (WX_DATA && WX_DATA.alert) || { active: false };
-    if (a.active) {
-      // 주의보/경보 감지 → 배너 노출
-      wrap.style.display = "";
-      box.className = "alert-banner is-on";
-      box.innerHTML =
-        `<span class="ab-ico"><i data-lucide="alert-triangle"></i></span>
-         <span class="ab-text"><b>${a.area || "서울"} [${a.title}]</b> 발효 중 — ${a.message || "안전에 유의하세요."}</span>`;
-      refreshIcons();
-    } else {
+    // 발효 특보 목록 (구버전 캐시 호환: list 없으면 최상위 필드로 1건 구성)
+    const list = (a.list && a.list.length) ? a.list : (a.active ? [a] : []);
+
+    // 기존 순환 타이머 정리(데이터 갱신·재렌더 시 중복 방지)
+    if (ALERT_ROTATE_TIMER) { clearInterval(ALERT_ROTATE_TIMER); ALERT_ROTATE_TIMER = null; }
+
+    if (list.length === 0) {
       // 특보 없음 → 배너 숨김
       wrap.style.display = "none";
       box.className = "alert-banner is-off";
       box.innerHTML = "";
+      return;
+    }
+
+    // 주의보/경보 감지 → 배너 노출
+    wrap.style.display = "";
+    box.className = "alert-banner is-on";
+    if (ALERT_INDEX >= list.length) ALERT_INDEX = 0;
+
+    const paint = () => {
+      const it = list[ALERT_INDEX] || list[0];
+      // 전체 특보 수를 항상 우측 하단에 작게 표시 (1/1, 1/3, 2/3 …)
+      //  → 특보가 몇 개인지, 지금 몇 번째를 순환 중인지 한눈에 파악.
+      const counter = `<span class="ab-count">${ALERT_INDEX + 1}/${list.length}</span>`;
+      box.innerHTML =
+        `<span class="ab-ico"><i data-lucide="alert-triangle"></i></span>
+         <span class="ab-text"><b>${it.area || "서울"} [${it.title}]</b> 발효 중 — ${it.message || "안전에 유의하세요."}</span>
+         ${counter}`;
+      refreshIcons();
+    };
+    paint();
+
+    // 2개 이상일 때만 3초 간격 자동 순환
+    if (list.length > 1) {
+      ALERT_ROTATE_TIMER = setInterval(() => {
+        ALERT_INDEX = (ALERT_INDEX + 1) % list.length;
+        paint();
+      }, ALERT_ROTATE_MS);
     }
   }
 
@@ -356,11 +393,18 @@
     return Array.isArray(item) ? item : [item];
   }
 
-  // GAS 프록시 URL 빌더 — 키는 서버(트윈날씨/Code.gs)에만 보관, CORS 도 해결
-  function kmaUrl(service, op, params) {
+  // GAS 배치 호출 — 여러 KMA 요청을 한 번에 보내 서버측 병렬(fetchAll)로 처리.
+  //  GAS 는 브라우저의 동시요청을 직렬화해 4개 따로 부르면 ~7.5s → 배치 1회면 ~2s.
+  //  specs: [{ s:service, o:op, p:{params} }, ...] → 같은 순서의 JSON 배열 반환.
+  async function kmaBatch(specs) {
     const base = (C.KMA && C.KMA.PROXY_URL) || "";
-    const qs = Object.keys(params).map((k) => `${k}=${encodeURIComponent(params[k])}`).join("&");
-    return `${base}${base.indexOf("?") === -1 ? "?" : "&"}service=${encodeURIComponent(service)}&op=${encodeURIComponent(op)}&${qs}`;
+    const reqs = encodeURIComponent(JSON.stringify(specs));
+    const url = `${base}${base.indexOf("?") === -1 ? "?" : "&"}op=batch&reqs=${reqs}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("batch " + res.status);
+    const arr = await res.json();
+    if (!Array.isArray(arr)) throw new Error("batch shape: " + JSON.stringify(arr).slice(0, 120));
+    return arr;   // specs 와 동일 순서
   }
 
   // 초단기실황 base: 매시 40분 이후 갱신 → 40분 여유
@@ -378,14 +422,8 @@
   }
 
   // ① 초단기실황 → 현재 (T1H 기온 / REH 습도 / WSD 풍속 / PTY 강수형태)
-  async function fetchKmaNow() {
-    const { base_date, base_time } = kmaUltraBase();
-    const url = kmaUrl("VilageFcstInfoService_2.0", "getUltraSrtNcst", {
-      pageNo: 1, numOfRows: 10, base_date, base_time, nx: C.KMA.NX, ny: C.KMA.NY,
-    });
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("getUltraSrtNcst " + res.status);
-    const json = await res.json();
+  //   배치 응답(json)을 받아 파싱만 수행 (네트워크 호출은 kmaBatch 가 담당)
+  function parseNcst(json) {
     const items = kmaItems_(json);
     const m = {};
     items.forEach((it) => { m[it.category] = it.obsrValue; });   // 코드→값 매핑
@@ -449,15 +487,8 @@
     if (d.getHours() < 3) { d.setDate(d.getDate() - 1); return { base_date: ymd(d), base_time: "2300" }; }
     return { base_date: ymd(d), base_time: "0200" };
   }
-  async function fetchKmaExtremes() {
-    const { base_date, base_time } = kmaDayBase();
-    const url = kmaUrl("VilageFcstInfoService_2.0", "getVilageFcst", {
-      pageNo: 1, numOfRows: 800, base_date, base_time, nx: C.KMA.NX, ny: C.KMA.NY,
-    });
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("getVilageFcst(ext) " + res.status);
-    const json = await res.json();
-    if (!json.response || !json.response.header || json.response.header.resultCode !== "00") throw new Error("ext no data");
+  function parseExtremesJson(json) {
+    if (!json || !json.response || !json.response.header || json.response.header.resultCode !== "00") throw new Error("ext no data");
     const items = json.response.body.items.item;
     const today = ymd(new Date());
     let tmx = null, tmn = null;
@@ -470,17 +501,7 @@
     return { tmx: tmx == null ? "-" : tmx, tmn: tmn == null ? "-" : tmn };
   }
 
-  // ②③ 단기예보 원본 1회 호출 (시간별 + 주간 공용)
-  async function fetchKmaVilageRaw() {
-    const { base_date, base_time } = kmaVilageBase();
-    const url = kmaUrl("VilageFcstInfoService_2.0", "getVilageFcst", {
-      pageNo: 1, numOfRows: 800, base_date, base_time, nx: C.KMA.NX, ny: C.KMA.NY,
-    });
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("getVilageFcst " + res.status);
-    const json = await res.json();
-    return kmaItems_(json);   // 원본 item 배열(정상 응답 검증 + 단일객체 정규화)
-  }
+  // ②③ 단기예보 원본(item 배열) = kmaItems_(json) 로 배치 응답에서 직접 추출
 
   // ② 시간별: TMP/POP/SKY/PTY/WSD/REH → 현재 이후 10슬롯
   function parseHourly(items) {
@@ -526,32 +547,58 @@
   }
 
   // ④ 기상특보 현황 (getWthrWrnMsg) → 주의보/경보 포함 시 배너 노출
-  async function fetchKmaAlert() {
-    const url = kmaUrl("WthrWrnInfoService", "getWthrWrnMsg", {
-      pageNo: 1, numOfRows: 10, stnId: (C.KMA && C.KMA.STN_ID) || 109,
-    });
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("getWthrWrnMsg " + res.status);
-    const json = await res.json();
-    const header = json.response && json.response.header;
+  //  응답의 모든 item(t6/t7/other) 텍스트에서 발효 특보를 '전부' 추출 →
+  //  여러 개면 renderAlert 가 3초 간격으로 순환 표시. (list: [{title,level,...}])
+  function parseAlertJson(json) {
+    const header = json && json.response && json.response.header;
     // resultCode "03"(NO_DATA) = 발효 특보 없음 → 미발령으로 처리
-    if (!header || header.resultCode !== "00") return { active: false };
+    if (!header || header.resultCode !== "00") return { active: false, list: [] };
     const body = json.response.body;
-    let item = body && body.items && body.items.item;
-    if (!item) return { active: false };
-    if (Array.isArray(item)) item = item[0];
-    // t6: 현재 발효 특보, t7: 예비특보, other: 기타문구
-    const text = (item && (item.t6 || item.t7 || item.other || "")) || "";
-    return parseAlertText(text);
+    let items = body && body.items && body.items.item;
+    if (!items) return { active: false, list: [] };
+    if (!Array.isArray(items)) items = [items];
+
+    // 모든 item 의 텍스트를 이어 붙여 특보 종류를 중복 없이 수집
+    const seen = new Set();
+    const list = [];
+    items.forEach(function (item) {
+      // t6: 현재 발효 특보, t7: 예비특보, other: 기타문구
+      const text = (item && (item.t6 || item.t7 || item.other || "")) || "";
+      parseAlertList(text).forEach(function (a) {
+        if (seen.has(a.title)) return;   // 같은 특보명 중복 제거
+        seen.add(a.title);
+        list.push(a);
+      });
+    });
+    // 하위호환: 첫 특보의 필드를 최상위에도 노출(active/title/level/area/message)
+    return Object.assign({ active: list.length > 0, list }, list[0] || {});
   }
 
-  // 특보 문장 파싱 → {active, title, level}
-  function parseAlertText(text) {
-    if (!text || !/(경보|주의보)/.test(text)) return { active: false };
-    const m = text.match(/([가-힣]{2,}(?:경보|주의보))/);   // 예: "강풍주의보"
-    const title = m ? m[1] : (/경보/.test(text) ? "기상경보" : "기상주의보");
-    const level = /경보/.test(title) ? "경보" : "주의보";
-    return { active: true, level, title, area: "서울·영등포", message: "현장 안전에 유의하세요." };
+  // 특보 문장 파싱 → 발효 특보 배열 [{active, title, level, area, message}, ...]
+  function parseAlertList(text) {
+    if (!text || !/(경보|주의보)/.test(text)) return [];
+    const re = /([가-힣]{2,}(?:경보|주의보))/g;   // 예: "강풍주의보", "호우경보"
+    const out = [];
+    const seen = new Set();
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const title = m[1];
+      if (seen.has(title)) continue;
+      seen.add(title);
+      out.push({
+        active: true,
+        title,
+        level: /경보/.test(title) ? "경보" : "주의보",
+        area: "서울·영등포",
+        message: "현장 안전에 유의하세요.",
+      });
+    }
+    // 특보 키워드는 있으나 구체 종류 미추출 시 일반 문구로 1건 처리
+    if (out.length === 0) {
+      const level = /경보/.test(text) ? "경보" : "주의보";
+      out.push({ active: true, title: "기상" + level, level, area: "서울·영등포", message: "현장 안전에 유의하세요." });
+    }
+    return out;
   }
 
   /* ---------------- 샘플 데이터 (키 없을 때 UI 표시용) ---------------- */

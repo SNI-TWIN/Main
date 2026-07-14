@@ -216,11 +216,63 @@
         }
       } else {
         window.addEventListener("load", function () {
-          navigator.serviceWorker.register("sw.js").catch(function (e) {
+          navigator.serviceWorker.register("sw.js").then(function (reg) {
+            // 새 버전(대기 중인 SW)이 준비되면 '새로고침' 알림을 띄운다.
+            //  - navigator.serviceWorker.controller 가 있어야 = '업데이트'(첫 설치 제외)
+            if (reg.waiting && navigator.serviceWorker.controller) showUpdateToast(reg);
+            reg.addEventListener("updatefound", function () {
+              var nw = reg.installing;
+              if (!nw) return;
+              nw.addEventListener("statechange", function () {
+                if (nw.state === "installed" && navigator.serviceWorker.controller) {
+                  showUpdateToast(reg);
+                }
+              });
+            });
+          }).catch(function (e) {
             console.log("ServiceWorker 등록 보류:", e);
+          });
+
+          // 사용자가 '새로고침' 을 누르면 새 SW 가 활성화 → controllerchange → 한 번만 리로드
+          var reloaded = false;
+          navigator.serviceWorker.addEventListener("controllerchange", function () {
+            if (reloaded) return;
+            reloaded = true;
+            location.reload();
           });
         });
       }
+    }
+
+    // 하단에 뜨는 '새 버전이 있어요 · [새로고침]' 작은 바 (앱 스타일 불필요, 인라인)
+    function showUpdateToast(reg) {
+      if (document.getElementById("swUpdateToast")) return;
+      var bar = document.createElement("div");
+      bar.id = "swUpdateToast";
+      bar.style.cssText =
+        "position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 80px);" +
+        "transform:translateX(-50%);z-index:99999;display:flex;gap:12px;align-items:center;" +
+        "background:#111827;color:#fff;padding:10px 14px;border-radius:12px;" +
+        "box-shadow:0 8px 24px rgba(0,0,0,.28);font-size:14px;max-width:92vw;" +
+        "font-family:system-ui,-apple-system,sans-serif;";
+      var msg = document.createElement("span");
+      msg.textContent = "새 버전이 있어요.";
+      var btn = document.createElement("button");
+      btn.textContent = "새로고침";
+      btn.style.cssText =
+        "background:#4f46e5;color:#fff;border:0;border-radius:8px;padding:6px 12px;" +
+        "font-size:14px;font-weight:600;cursor:pointer;flex:none;";
+      btn.onclick = function () {
+        btn.disabled = true;
+        btn.textContent = "적용 중…";
+        // 대기 중인 새 SW 에게 즉시 교체 요청 → controllerchange 로 자동 리로드
+        var w = reg.waiting || (reg.installing);
+        if (w) w.postMessage({ type: "SKIP_WAITING" });
+        else location.reload();
+      };
+      bar.appendChild(msg);
+      bar.appendChild(btn);
+      document.body.appendChild(bar);
     }
   </script>
 </body>
