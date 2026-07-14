@@ -599,16 +599,35 @@
     return Object.assign({ active: list.length > 0, list }, list[0] || {});
   }
 
+  // 우리 지역(영등포)에 해당하는 특보구역 키워드.
+  //  ⚠ getWthrWrnMsg(stnId=109)는 서울지방기상청 관할 '전체'(서울·인천·경기·서해앞바다)
+  //     특보를 내려줍니다. 지역 필터 없이 특보명만 긁으면 서해 '풍랑주의보' 같은
+  //     내륙 무관 특보까지 배너에 뜹니다. KMA 는 서울을 하위구역으로 쪼개지 않으므로
+  //     발효지역에 "서울"이 있으면 영등포 포함으로 봅니다.
+  const ALERT_REGIONS = ["서울"];
+  function areaMatchesRegion_(areaText) {
+    if (!areaText) return false;
+    return ALERT_REGIONS.some(function (r) { return areaText.indexOf(r) !== -1; });
+  }
+
   // 특보 문장 파싱 → 발효 특보 배열 [{active, title, level, area, message}, ...]
+  //  t6 형식: 줄마다 "o {특보명} : {발효지역들}". 지역에 '서울' 포함된 줄만 채택.
   function parseAlertList(text) {
     if (!text || !/(경보|주의보)/.test(text)) return [];
-    const re = /([가-힣]{2,}(?:경보|주의보))/g;   // 예: "강풍주의보", "호우경보"
     const out = [];
     const seen = new Set();
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      const title = m[1];
-      if (seen.has(title)) continue;
+    text.split(/\r?\n/).forEach(function (rawLine) {
+      // 앞머리 불릿("o ", "- ", "· " 등) 제거
+      const line = rawLine.replace(/^[\s·oO∙•\-]+/, "").trim();
+      if (!line || !/(경보|주의보)/.test(line)) return;
+      const ci = line.indexOf(":");
+      if (ci === -1) return;                    // 지역을 특정할 수 없으면 제외(오탐 방지)
+      const areas = line.slice(ci + 1);
+      if (!areaMatchesRegion_(areas)) return;   // 서울 미포함(풍랑/서해5도 등) 특보 제외
+      const tm = line.slice(0, ci).match(/([가-힣]{2,}(?:경보|주의보))/);
+      if (!tm) return;
+      const title = tm[1];
+      if (seen.has(title)) return;
       seen.add(title);
       out.push({
         active: true,
@@ -617,12 +636,7 @@
         area: "서울·영등포",
         message: "현장 안전에 유의하세요.",
       });
-    }
-    // 특보 키워드는 있으나 구체 종류 미추출 시 일반 문구로 1건 처리
-    if (out.length === 0) {
-      const level = /경보/.test(text) ? "경보" : "주의보";
-      out.push({ active: true, title: "기상" + level, level, area: "서울·영등포", message: "현장 안전에 유의하세요." });
-    }
+    });
     return out;
   }
 
