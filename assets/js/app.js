@@ -400,11 +400,36 @@
     const base = (C.KMA && C.KMA.PROXY_URL) || "";
     const reqs = encodeURIComponent(JSON.stringify(specs));
     const url = `${base}${base.indexOf("?") === -1 ? "?" : "&"}op=batch&reqs=${reqs}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("batch " + res.status);
-    const arr = await res.json();
-    if (!Array.isArray(arr)) throw new Error("batch shape: " + JSON.stringify(arr).slice(0, 120));
-    return arr;   // specs 와 동일 순서
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("batch " + res.status);
+      const arr = await res.json();
+      // 배치 미지원(구버전 GAS)은 {error:"not allowed"} 같은 객체를 반환 → 폴백 트리거
+      if (!Array.isArray(arr)) throw new Error("batch shape: " + JSON.stringify(arr).slice(0, 120));
+      return arr;   // specs 와 동일 순서
+    } catch (e) {
+      // ⚠️ 배치 실패(구버전 GAS·네트워크 등) → 개별 직접호출로 자동 폴백.
+      //  GAS 가 브라우저 동시요청을 직렬화해 조금 느릴 수 있으나(재배포 전까지),
+      //  기능은 정상 동작(모든 특보 표시). GAS 재배포하면 다시 배치로 빨라짐.
+      console.warn("[KMA] 배치 실패 → 개별 호출 폴백:", e);
+      return kmaIndividual_(specs, base);
+    }
+  }
+
+  // 개별 직접호출 폴백 — 각 spec 을 프록시 직접경로(?service=&op=&params)로 호출.
+  //  반환 형태는 배치와 동일: specs 와 같은 순서의 KMA 응답(JSON) 배열.
+  async function kmaIndividual_(specs, base) {
+    const sep = base.indexOf("?") === -1 ? "?" : "&";
+    return Promise.all(specs.map(async function (spec) {
+      const pr = spec.p || {};
+      const qs = Object.keys(pr)
+        .map(function (k) { return k + "=" + encodeURIComponent(pr[k]); })
+        .join("&");
+      const u = `${base}${sep}service=${encodeURIComponent(spec.s)}&op=${encodeURIComponent(spec.o)}${qs ? "&" + qs : ""}`;
+      const r = await fetch(u);
+      if (!r.ok) throw new Error("kma " + spec.o + " " + r.status);
+      return r.json();
+    }));
   }
 
   // 초단기실황 base: 매시 40분 이후 갱신 → 40분 여유
