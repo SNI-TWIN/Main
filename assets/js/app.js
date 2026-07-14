@@ -159,7 +159,7 @@
         const ext = safeParse(() => parseExtremesJson(ejson), null);   // 오늘 정확한 최고/최저
         const alert = safeParse(() => parseAlertJson(ajson), { active: false }); // 기상특보
         Object.assign(now, parseTodayExtremes(vil));  // 강수확률 + 최고/최저 폴백
-        Object.assign(now, parseCurrentSky(vil));     // 하늘상태(SKY) 보정 → 맑음/구름많음/흐림
+        Object.assign(now, parseCurrentSky(vil, now.pty)); // 하늘상태(SKY)만 보정, 강수(PTY)는 실황 유지
         if (ext) { now.tmx = ext.tmx; now.tmn = ext.tmn; }
         // 체감온도: 기상청 생활기상지수 '체감온도' API 는 2026 데이터 생산중단으로 폐지됨.
         //  → 공식 API 없음. now.feels 는 parseNcst 의 feelsLike(T,H,V) 계산식이 유일한 소스.
@@ -459,6 +459,7 @@
       temp: Math.round(T), feels: round1(feelsLike(T, H, V)),
       humidity: H, wind: V, windDir: windDir(VEC),
       rain: (!RN1 || RN1 === "강수없음" || Number(RN1) === 0) ? "0mm" : `${RN1}mm`,
+      pty: PTY,   // 실황(관측) 강수형태 — parseCurrentSky 가 SKY 보정 시 이 값을 그대로 사용
       sky: ic.label, lucide: ic.lucide, clear: PTY === 0,
       tmx: "-", tmn: "-", pop: 0,   // 단기예보에서 보강(loadWeatherData)
     };
@@ -488,7 +489,10 @@
   }
 
   // 현재 하늘상태(SKY) — 단기예보 가장 가까운 시각 (초단기실황엔 SKY가 없어 보정)
-  function parseCurrentSky(items) {
+  //  ⚠ 강수 여부(PTY)는 '실황(관측)'이 정답 → 예보 PTY 로 덮어쓰지 않는다.
+  //     예보 PTY 를 쓰면 실제론 흐리기만 한데 '비 예보' 때문에 "비"로 오표시됨.
+  //     obsPty(초단기실황 PTY)가 있으면 그 값을 쓰고, SKY(하늘상태)만 예보에서 빌려온다.
+  function parseCurrentSky(items, obsPty) {
     const byTime = {};
     items.forEach((it) => {
       const k = it.fcstDate + it.fcstTime;
@@ -499,8 +503,10 @@
     const keys = Object.keys(byTime).sort();
     const k = keys.find((x) => x >= nowKey) || keys[0];
     const o = byTime[k] || {};
-    const ic = kmaIcon(o.SKY, o.PTY);
-    return { sky: ic.label, lucide: ic.lucide, clear: Number(o.SKY) === 1 && Number(o.PTY || 0) === 0 };
+    // 실황 PTY 우선(관측), 없을 때만 예보 PTY 폴백
+    const pty = (obsPty != null && !isNaN(Number(obsPty))) ? Number(obsPty) : Number(o.PTY || 0);
+    const ic = kmaIcon(o.SKY, pty);
+    return { sky: ic.label, lucide: ic.lucide, clear: Number(o.SKY) === 1 && pty === 0 };
   }
 
   // 날짜 YYYYMMDD
